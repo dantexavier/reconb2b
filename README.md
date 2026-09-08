@@ -58,6 +58,7 @@ notification service (mock SMS), seed data.
 ## Project layout
 
 - `db/schema.sql` — full Postgres schema
+- `db/migrate.js` — runs schema.sql via `pg` (no `psql` CLI required)
 - `db/seed.js` — Phase 1 seed data
 - `api/` — one file per REST endpoint (Vercel serverless functions); `api/_lib`
   holds shared helpers (db pool, session auth, notify service, promise date

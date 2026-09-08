@@ -8,8 +8,8 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "db:migrate": "psql \"$DATABASE_URL\" -f db/schema.sql",
-    "db:seed": "node db/seed.js"
+    "db:migrate": "node --env-file=.env db/migrate.js",
+    "db:seed": "node --env-file=.env db/seed.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
