@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { FileText, X } from 'lucide-react';
 import { api } from '../../lib/api';
-import { dateTime } from '../../lib/format';
+import { dateTime, money, shortDate } from '../../lib/format';
+import { STAGE_LABELS } from '../../lib/stages';
 
 const TYPE_LABELS = {
   inspection: 'Inspection',
@@ -87,10 +88,111 @@ function DocumentModal({ doc, onClose }) {
             <X size={16} />
           </button>
         </div>
-        <pre className="text-xs bg-slate-50 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
-          {JSON.stringify(doc.content, null, 2)}
-        </pre>
+        <DocumentContent doc={doc} />
       </div>
+    </div>
+  );
+}
+
+function DocumentContent({ doc }) {
+  const { document: meta, content } = doc;
+  if (!content) return <div className="text-sm text-slate-400">This document's underlying record could not be found.</div>;
+
+  if (meta.type === 'estimate') {
+    const lines = content.snapshot?.lines || [];
+    const total = lines.reduce((sum, l) => sum + (l.total_price_cents || l.totalPriceCents || 0), 0);
+    return (
+      <div>
+        <div className="text-xs text-slate-500 mb-2">
+          {content.kind === 'sent' ? `Version ${content.version}` : `Dealer decision — version ${content.version}`} ·{' '}
+          {dateTime(content.created_at)}
+        </div>
+        <div className="space-y-2">
+          {lines.map((l) => (
+            <div key={l.id} className="flex items-center justify-between border-b border-slate-100 pb-2 text-sm">
+              <div>
+                <div className="text-slate-900">{l.title}</div>
+                <div className="text-xs text-slate-500">
+                  {l.approval_status} · {STAGE_LABELS[l.stage] || l.stage}
+                </div>
+              </div>
+              <div className="text-slate-700 font-medium">{money(l.total_price_cents)}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between text-sm font-semibold mt-3 pt-2 border-t border-slate-200">
+          <span>Total</span>
+          <span>{money(total)}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (meta.type === 'inspection') {
+    return (
+      <div className="space-y-3">
+        <div className="text-xs text-slate-500">Completed {dateTime(content.completed_at)}</div>
+        {content.findings?.length > 0 ? (
+          <div>
+            <div className="text-xs font-semibold text-slate-600 mb-1">Findings</div>
+            <ul className="text-sm text-slate-700 list-disc list-inside space-y-0.5">
+              {content.findings.map((f, i) => (
+                <li key={i}>
+                  {f.title} <span className="text-xs text-slate-400">({f.severity})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-400">No findings recorded.</div>
+        )}
+        {content.checklist?.length > 0 ? (
+          <div>
+            <div className="text-xs font-semibold text-slate-600 mb-1">Checklist</div>
+            <ul className="text-sm text-slate-700 space-y-0.5">
+              {content.checklist.map((c, i) => (
+                <li key={i}>
+                  {c.passed ? '✓' : '✗'} {c.item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (meta.type === 'invoice') {
+    return (
+      <div className="space-y-1 text-sm">
+        <Row label="Subtotal" value={money(content.subtotal_cents)} />
+        <Row label="Tax" value={money(content.tax_cents)} />
+        <Row label="Total" value={money(content.total_cents)} strong />
+        <Row label="Status" value={content.status} />
+        {content.sent_at ? <Row label="Sent" value={shortDate(content.sent_at)} /> : null}
+        {content.paid_at ? <Row label="Paid" value={shortDate(content.paid_at)} /> : null}
+      </div>
+    );
+  }
+
+  if (meta.type === 'delivery_record') {
+    return (
+      <div className="space-y-1 text-sm">
+        <Row label="Status" value={content.status?.replace('_', ' ')} />
+        <Row label="Promised" value={shortDate(content.promised_at)} />
+        <Row label="Delivered" value={shortDate(content.delivered_at)} />
+      </div>
+    );
+  }
+
+  return <div className="text-sm text-slate-400">Unknown document type.</div>;
+}
+
+function Row({ label, value, strong }) {
+  return (
+    <div className={`flex justify-between ${strong ? 'font-semibold border-t border-slate-200 pt-1 mt-1' : ''}`}>
+      <span className="text-slate-500">{label}</span>
+      <span className="text-slate-900">{value}</span>
     </div>
   );
 }

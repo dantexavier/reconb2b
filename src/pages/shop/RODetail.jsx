@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Plus, Send, FileText, AlertTriangle } from 'lucide-react';
+import { Link, useParams } from 'react-router-dom';
+import { Plus, Send, FileText, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { api } from '../../lib/api';
 import { money, shortDate, dateTime } from '../../lib/format';
 import { PIPELINE_STAGES, STAGE_LABELS } from '../../lib/stages';
@@ -83,6 +83,9 @@ export default function RODetail() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      <Link to="/shop/board" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900">
+        <ArrowLeft size={14} /> Back to board
+      </Link>
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900">{vehicleLabel || 'Vehicle'}</h1>

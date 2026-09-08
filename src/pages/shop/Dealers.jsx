@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { api } from '../../lib/api';
-import { money } from '../../lib/format';
 import { DealerTierBadge } from '../../components/Badges';
 
 export default function Dealers() {
@@ -138,6 +137,9 @@ function DealerDetail({ dealer, onUpdated }) {
               <option value="prepay">Prepay</option>
               <option value="net15">Net 15</option>
               <option value="net30">Net 30</option>
+              <option value="due_on_pickup">Due on pickup</option>
+              <option value="accounts_receivable">Accounts receivable</option>
+              <option value="other">Other</option>
             </select>
           </div>
           <div>
@@ -152,10 +154,11 @@ function DealerDetail({ dealer, onUpdated }) {
             </select>
           </div>
           <LabeledInput
-            label="Labor rate (¢/hr)"
+            label="Labor rate ($/hr)"
             type="number"
-            value={form.laborRateCents}
-            onChange={(v) => setForm((f) => ({ ...f, laborRateCents: Number(v) }))}
+            step="0.01"
+            value={(form.laborRateCents / 100).toFixed(2)}
+            onChange={(v) => setForm((f) => ({ ...f, laborRateCents: Math.round(Number(v) * 100) }))}
           />
           <LabeledInput
             label="Parts markup %"
@@ -164,7 +167,6 @@ function DealerDetail({ dealer, onUpdated }) {
             onChange={(v) => setForm((f) => ({ ...f, partsMarkupPct: Number(v) }))}
           />
         </div>
-        <div className="text-xs text-slate-400">Effective labor rate: {money(form.laborRateCents)}/hr</div>
         <button type="submit" className="bg-slate-900 text-white text-sm px-3 py-1.5 rounded-md">
           {saved ? 'Saved ✓' : 'Save'}
         </button>
@@ -222,12 +224,13 @@ function DealerDetail({ dealer, onUpdated }) {
   );
 }
 
-function LabeledInput({ label, value, onChange, type = 'text' }) {
+function LabeledInput({ label, value, onChange, type = 'text', step }) {
   return (
     <div>
       <label className="block text-xs text-slate-500 mb-1">{label}</label>
       <input
         type={type}
+        step={step}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-sm"

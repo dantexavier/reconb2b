@@ -16,7 +16,7 @@ CREATE TABLE dealers (
   secondary_contact_email TEXT,
   secondary_contact_phone TEXT,
   payment_terms     TEXT NOT NULL DEFAULT 'net15'
-                      CHECK (payment_terms IN ('prepay', 'net15', 'net30')),
+                      CHECK (payment_terms IN ('prepay', 'net15', 'net30', 'due_on_pickup', 'accounts_receivable', 'other')),
   priority_tier     TEXT NOT NULL DEFAULT 'standard'
                       CHECK (priority_tier IN ('standard', 'priority')),
   labor_rate_cents  INTEGER NOT NULL DEFAULT 12000,
