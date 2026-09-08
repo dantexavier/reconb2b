@@ -13,8 +13,8 @@ export default function RODetail() {
   const [techs, setTechs] = useState([]);
   const [error, setError] = useState('');
   const [newLine, setNewLine] = useState({ title: '', laborHours: 0, partsCostCents: 0 });
-  const [inspection, setInspection] = useState({ findings: [], photos: [] });
-  const [findingDraft, setFindingDraft] = useState({ title: '', severity: 'minor' });
+  const [inspection, setInspection] = useState({ findings: [] });
+  const [findingDraft, setFindingDraft] = useState({ title: '', severity: 'minor', photos: [] });
 
   const load = useCallback(() => {
     api.get(`/recon-orders/${id}`).then(setData).catch((err) => setError(err.message));
@@ -65,7 +65,7 @@ export default function RODetail() {
   function addFinding() {
     if (!findingDraft.title) return;
     setInspection((i) => ({ ...i, findings: [...i.findings, findingDraft] }));
-    setFindingDraft({ title: '', severity: 'minor' });
+    setFindingDraft({ title: '', severity: 'minor', photos: [] });
   }
 
   async function submitInspection() {
@@ -74,7 +74,7 @@ export default function RODetail() {
       findings: inspection.findings,
       checklist: [],
     });
-    setInspection({ findings: [], photos: [] });
+    setInspection({ findings: [] });
     load();
   }
 
@@ -232,16 +232,20 @@ export default function RODetail() {
               Add finding
             </button>
           </div>
+          <PhotoPicker
+            photos={findingDraft.photos}
+            onChange={(photos) => setFindingDraft((f) => ({ ...f, photos }))}
+            label="Add photos to this finding"
+          />
           {inspection.findings.length > 0 ? (
             <ul className="text-sm text-slate-700 list-disc list-inside">
               {inspection.findings.map((f, i) => (
                 <li key={i}>
-                  {f.title} <span className="text-xs text-slate-400">({f.severity})</span>
+                  {f.title} <span className="text-xs text-slate-400">({f.severity}{f.photos?.length ? `, ${f.photos.length} photo(s)` : ''})</span>
                 </li>
               ))}
             </ul>
           ) : null}
-          <PhotoPicker photos={inspection.photos} onChange={(photos) => setInspection((i) => ({ ...i, photos }))} label="Add finding photos" />
           <button
             onClick={submitInspection}
             disabled={inspection.findings.length === 0}

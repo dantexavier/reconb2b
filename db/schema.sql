@@ -198,11 +198,18 @@ CREATE TABLE estimate_snapshots (
   snapshot         JSONB NOT NULL,
   kind             TEXT NOT NULL CHECK (kind IN ('sent', 'approved')),
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  created_by_user_id UUID REFERENCES users(id),
-  UNIQUE (ro_id, version, kind)
+  created_by_user_id UUID REFERENCES users(id)
 );
 
 CREATE INDEX idx_estimate_snapshots_ro_id ON estimate_snapshots(ro_id);
+
+-- Only one "sent" snapshot per estimate version (resending the same
+-- version is a no-op / bug). "approved" snapshots are NOT unique per
+-- version — every individual dealer approve/decline action writes its
+-- own "approved" snapshot against whichever version it's deciding on, so
+-- there can be many per version.
+CREATE UNIQUE INDEX estimate_snapshots_sent_version_uniq
+  ON estimate_snapshots (ro_id, version) WHERE kind = 'sent';
 
 -- No UPDATE/DELETE ever performed against estimate_snapshots at the
 -- application layer — enforced by convention (application code) since a

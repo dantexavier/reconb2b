@@ -135,10 +135,19 @@ function DocumentContent({ doc }) {
         {content.findings?.length > 0 ? (
           <div>
             <div className="text-xs font-semibold text-slate-600 mb-1">Findings</div>
-            <ul className="text-sm text-slate-700 list-disc list-inside space-y-0.5">
+            <ul className="text-sm text-slate-700 space-y-2">
               {content.findings.map((f, i) => (
                 <li key={i}>
-                  {f.title} <span className="text-xs text-slate-400">({f.severity})</span>
+                  <div>
+                    {f.title} <span className="text-xs text-slate-400">({f.severity})</span>
+                  </div>
+                  {f.photos?.length > 0 ? (
+                    <div className="flex gap-1 mt-1">
+                      {f.photos.map((src, j) => (
+                        <img key={j} src={src} alt="" className="w-14 h-14 object-cover rounded border border-slate-200" />
+                      ))}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

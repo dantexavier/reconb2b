@@ -19,6 +19,10 @@ async function handleList(req, res) {
     params.push(req.user.dealer_id);
     clauses.push(`r.dealer_id = $${params.length}`);
   }
+  if (req.user.role === 'tech') {
+    params.push(req.user.id);
+    clauses.push(`rl.tech_id = $${params.length}`);
+  }
   if (stage) {
     params.push(stage);
     clauses.push(`rl.stage = $${params.length}`);

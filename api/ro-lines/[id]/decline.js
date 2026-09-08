@@ -2,6 +2,7 @@ const { query } = require('../../_lib/db');
 const { withAuth, isDealerUser } = require('../../_lib/auth');
 const { ok, notFound, forbidden, badRequest, methodNotAllowed } = require('../../_lib/http');
 const { getLatestSentVersion, writeSnapshot } = require('../../_lib/estimateSnapshot');
+const { recalcPromiseDate } = require('../../_lib/promiseDate');
 
 module.exports = withAuth(async (req, res) => {
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
@@ -35,6 +36,7 @@ module.exports = withAuth(async (req, res) => {
   await writeSnapshot({ roId: line.ro_id, version, kind: 'approved', actorUserId: req.user.id });
 
   await query(`UPDATE recon_orders SET status = 'active' WHERE id = $1 AND status = 'pending_approval'`, [line.ro_id]);
+  await recalcPromiseDate(line.ro_id, req.user);
 
   return ok(res, { line: updatedRows[0] });
 });
