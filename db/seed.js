@@ -26,24 +26,7 @@ async function main() {
     `);
 
     console.log('Creating labor guide...');
-    const laborGuide = [
-      { title: 'Full detail', category: 'detail', hours: 3, parts: 0 },
-      { title: 'Interior detail', category: 'detail', hours: 2, parts: 0 },
-      { title: 'Mechanical inspection', category: 'mechanical', hours: 1.5, parts: 0 },
-      { title: 'Brake pad replacement (front)', category: 'mechanical', hours: 1.5, parts: 6000 },
-      { title: 'Brake pad + rotor replacement', category: 'mechanical', hours: 2.5, parts: 15000 },
-      { title: 'Alternator replacement', category: 'mechanical', hours: 2.5, parts: 18000 },
-      { title: 'Battery replacement', category: 'mechanical', hours: 0.5, parts: 12000 },
-      { title: 'Oil change + multi-point inspection', category: 'mechanical', hours: 0.75, parts: 4500 },
-      { title: 'Windshield replacement', category: 'glass', hours: 1.5, parts: 22000 },
-      { title: 'Window regulator replacement', category: 'glass', hours: 2, parts: 9000 },
-      { title: 'Paint correction (single panel)', category: 'body_paint', hours: 3, parts: 0 },
-      { title: 'Bumper repair + repaint', category: 'body_paint', hours: 4, parts: 4000 },
-      { title: 'Door ding repair', category: 'body_paint', hours: 2, parts: 1500 },
-      { title: 'Headlight restoration', category: 'body_paint', hours: 1, parts: 1000 },
-      { title: 'Battery terminal / wiring repair', category: 'electrical', hours: 1, parts: 2000 },
-      { title: 'Dashboard warning light diagnosis', category: 'electrical', hours: 1, parts: 0 },
-    ];
+    const laborGuide = require('./laborGuideCatalog');
     const laborGuideIds = {};
     for (const item of laborGuide) {
       const { rows } = await client.query(

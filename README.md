@@ -108,3 +108,12 @@ revenue/cycle-time/response-time, filterable internal vs. customer-pay).
   started in rather than splitting it across a week boundary — a reasonable
   v1 simplification, revisit if week-over-week numbers look off near
   boundaries.
+- The labor guide (`db/laborGuideCatalog.js`, ~65 items) is a shop-curated
+  set of default hours/parts costs, **not licensed MOTOR/Mitchell1
+  flat-rate data** — MOTOR times are a paid commercial product typically
+  licensed to software vendors rather than sold as a self-serve API to an
+  individual shop. If/when Grid Auto Recon licenses real MOTOR (or
+  Mitchell1) data, the intended integration point is a sync job that
+  upserts into the existing `labor_guide_items` table (add a
+  `motor_operation_code` column to match on) rather than replacing this
+  catalog — advisors keep the same picker UI either way.
