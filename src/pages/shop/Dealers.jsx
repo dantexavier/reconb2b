@@ -8,12 +8,17 @@ export default function Dealers() {
   const [selectedId, setSelectedId] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [newDealer, setNewDealer] = useState({ name: '', contactName: '', contactEmail: '', laborRateCents: 12000, partsMarkupPct: 25 });
+  const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   function load() {
-    api.get('/dealers').then((data) => {
-      setDealers(data.dealers);
-      if (!selectedId && data.dealers[0]) setSelectedId(data.dealers[0].id);
-    });
+    api
+      .get('/dealers')
+      .then((data) => {
+        setDealers(data.dealers);
+        if (!selectedId && data.dealers[0]) setSelectedId(data.dealers[0].id);
+      })
+      .catch((err) => setError(err.message));
   }
 
   useEffect(load, []);
@@ -22,10 +27,18 @@ export default function Dealers() {
 
   async function createDealer(e) {
     e.preventDefault();
-    await api.post('/dealers', newDealer);
-    setShowNew(false);
-    setNewDealer({ name: '', contactName: '', contactEmail: '', laborRateCents: 12000, partsMarkupPct: 25 });
-    load();
+    setError('');
+    setCreating(true);
+    try {
+      await api.post('/dealers', newDealer);
+      setShowNew(false);
+      setNewDealer({ name: '', contactName: '', contactEmail: '', laborRateCents: 12000, partsMarkupPct: 25 });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -58,11 +71,13 @@ export default function Dealers() {
               onChange={(e) => setNewDealer((d) => ({ ...d, contactEmail: e.target.value }))}
               className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
             />
-            <button type="submit" className="w-full bg-slate-900 text-white text-sm py-1.5 rounded">
-              Create
+            {error ? <div className="text-xs text-red-600">{error}</div> : null}
+            <button type="submit" disabled={creating} className="w-full bg-slate-900 text-white text-sm py-1.5 rounded disabled:opacity-50">
+              {creating ? 'Creating…' : 'Create'}
             </button>
           </form>
         ) : null}
+        {!showNew && error ? <div className="text-xs text-red-600 mb-2">{error}</div> : null}
         <div className="space-y-1">
           {dealers.map((d) => (
             <button
