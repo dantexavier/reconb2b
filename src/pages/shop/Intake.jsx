@@ -4,13 +4,7 @@ import { Plus, Trash2, ScanLine } from 'lucide-react';
 import { api } from '../../lib/api';
 import { decodeVin } from '../../lib/vin';
 import PhotoPicker from '../../components/PhotoPicker';
-
-const LINE_PACKAGES = {
-  custom: { label: 'Custom line', laborHours: 0 },
-  full_detail: { label: 'Full detail', laborHours: 3 },
-  mechanical_inspection: { label: 'Mechanical inspection', laborHours: 1.5 },
-  paint_correction: { label: 'Paint correction', laborHours: 4 },
-};
+import { CATEGORY_LABELS } from '../../lib/laborGuide';
 
 export default function Intake() {
   const navigate = useNavigate();
@@ -24,12 +18,15 @@ export default function Intake() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [createdRO, setCreatedRO] = useState(null);
+  const [laborGuide, setLaborGuide] = useState([]);
+  const [selectedGuideItem, setSelectedGuideItem] = useState('');
 
   useEffect(() => {
     api.get('/dealers').then((data) => {
       setDealers(data.dealers);
       if (data.dealers[0]) setDealerId(data.dealers[0].id);
     });
+    api.get('/labor-guide').then((data) => setLaborGuide(data.items));
   }, []);
 
   const selectedDealer = dealers.find((d) => d.id === dealerId);
@@ -51,11 +48,26 @@ export default function Intake() {
     }
   }
 
-  function addLine(packageKey) {
-    const pkg = LINE_PACKAGES[packageKey];
+  function addGuideLine() {
+    const laborRateCents = selectedDealer?.labor_rate_cents || 12000;
+    if (!selectedGuideItem) {
+      setLines((ls) => [...ls, { title: '', laborHours: 0, laborRateCents, partsCostCents: 0, partsPriceCents: 0 }]);
+      return;
+    }
+    const item = laborGuide.find((i) => i.id === selectedGuideItem);
+    if (!item) return;
+    const markupPct = Number(selectedDealer?.parts_markup_pct || 0);
+    const partsCostCents = Number(item.default_parts_cost_cents);
     setLines((ls) => [
       ...ls,
-      { title: pkg.label, laborHours: pkg.laborHours, laborRateCents: selectedDealer?.labor_rate_cents || 12000, partsCostCents: 0, partsPriceCents: 0 },
+      {
+        title: item.title,
+        laborHours: Number(item.default_labor_hours),
+        laborRateCents,
+        partsCostCents,
+        partsPriceCents: Math.round(partsCostCents * (1 + markupPct / 100)),
+        laborGuideItemId: item.id,
+      },
     ]);
   }
 
@@ -172,17 +184,34 @@ export default function Intake() {
         </Section>
 
         <Section title="Lines">
-          <div className="flex gap-2 mb-3 flex-wrap">
-            {Object.entries(LINE_PACKAGES).map(([key, pkg]) => (
-              <button
-                type="button"
-                key={key}
-                onClick={() => addLine(key)}
-                className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50"
-              >
-                <Plus size={12} /> {pkg.label}
-              </button>
-            ))}
+          <div className="flex gap-2 mb-3">
+            <select
+              value={selectedGuideItem}
+              onChange={(e) => setSelectedGuideItem(e.target.value)}
+              className="flex-1 px-2.5 py-1.5 border border-slate-300 rounded-md text-sm"
+            >
+              <option value="">Custom line…</option>
+              {Object.entries(CATEGORY_LABELS).map(([cat, label]) => {
+                const items = laborGuide.filter((i) => i.category === cat);
+                if (items.length === 0) return null;
+                return (
+                  <optgroup key={cat} label={label}>
+                    {items.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.title} ({Number(i.default_labor_hours)}h)
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+            </select>
+            <button
+              type="button"
+              onClick={addGuideLine}
+              className="flex items-center gap-1 text-xs px-2.5 py-1.5 border border-slate-300 rounded-md hover:bg-slate-50"
+            >
+              <Plus size={12} /> Add line
+            </button>
           </div>
           <div className="space-y-2">
             {lines.map((line, idx) => (

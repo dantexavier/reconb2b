@@ -1,6 +1,9 @@
 /**
- * Phase 1 seed script — 2 dealers (incl. Grid Auto Sales internal), users
- * for every role, 8 vehicles spread across pipeline stages.
+ * Seed script — 2 dealers (incl. Grid Auto Sales internal), users for every
+ * role, a labor guide catalog, and 9 vehicles: the original 8 spread across
+ * pipeline stages (per the Phase 1 spec), plus a 9th already-delivered
+ * vehicle with a full stage history so the Phase 2 analytics charts have
+ * more than one data point to render.
  *
  * Usage: DATABASE_URL=postgres://... node db/seed.js
  */
@@ -18,9 +21,37 @@ async function main() {
     console.log('Clearing existing data...');
     await client.query(`
       TRUNCATE TABLE notifications, alert_prefs, documents, inspections, estimate_snapshots,
-        invoices, parts_orders, stage_events, ro_lines, recon_orders, vehicles,
-        sessions, users, dealers RESTART IDENTITY CASCADE
+        invoices, qc_checks, parts_orders, stage_events, ro_lines, recon_orders, vehicles,
+        sessions, users, dealers, labor_guide_items RESTART IDENTITY CASCADE
     `);
+
+    console.log('Creating labor guide...');
+    const laborGuide = [
+      { title: 'Full detail', category: 'detail', hours: 3, parts: 0 },
+      { title: 'Interior detail', category: 'detail', hours: 2, parts: 0 },
+      { title: 'Mechanical inspection', category: 'mechanical', hours: 1.5, parts: 0 },
+      { title: 'Brake pad replacement (front)', category: 'mechanical', hours: 1.5, parts: 6000 },
+      { title: 'Brake pad + rotor replacement', category: 'mechanical', hours: 2.5, parts: 15000 },
+      { title: 'Alternator replacement', category: 'mechanical', hours: 2.5, parts: 18000 },
+      { title: 'Battery replacement', category: 'mechanical', hours: 0.5, parts: 12000 },
+      { title: 'Oil change + multi-point inspection', category: 'mechanical', hours: 0.75, parts: 4500 },
+      { title: 'Windshield replacement', category: 'glass', hours: 1.5, parts: 22000 },
+      { title: 'Window regulator replacement', category: 'glass', hours: 2, parts: 9000 },
+      { title: 'Paint correction (single panel)', category: 'body_paint', hours: 3, parts: 0 },
+      { title: 'Bumper repair + repaint', category: 'body_paint', hours: 4, parts: 4000 },
+      { title: 'Door ding repair', category: 'body_paint', hours: 2, parts: 1500 },
+      { title: 'Headlight restoration', category: 'body_paint', hours: 1, parts: 1000 },
+      { title: 'Battery terminal / wiring repair', category: 'electrical', hours: 1, parts: 2000 },
+      { title: 'Dashboard warning light diagnosis', category: 'electrical', hours: 1, parts: 0 },
+    ];
+    const laborGuideIds = {};
+    for (const item of laborGuide) {
+      const { rows } = await client.query(
+        `INSERT INTO labor_guide_items (title, category, default_labor_hours, default_parts_cost_cents) VALUES ($1,$2,$3,$4) RETURNING id`,
+        [item.title, item.category, item.hours, item.parts]
+      );
+      laborGuideIds[item.title] = rows[0].id;
+    }
 
     const passwordHash = await hashPassword(DEFAULT_PASSWORD);
 
@@ -78,11 +109,11 @@ async function main() {
       return rows[0].id;
     }
 
-    async function createRO(vehicleId, dealerId, status, createdHoursAgo, promisedAt) {
+    async function createRO(vehicleId, dealerId, status, createdHoursAgo, promisedAt, deliveredHoursAgo = null) {
       const { rows } = await client.query(
-        `INSERT INTO recon_orders (vehicle_id, dealer_id, status, created_at, promised_at)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-        [vehicleId, dealerId, status, hoursAgo(createdHoursAgo), promisedAt]
+        `INSERT INTO recon_orders (vehicle_id, dealer_id, status, created_at, promised_at, delivered_at)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [vehicleId, dealerId, status, hoursAgo(createdHoursAgo), promisedAt, deliveredHoursAgo != null ? hoursAgo(deliveredHoursAgo) : null]
       );
       return rows[0].id;
     }
@@ -101,13 +132,14 @@ async function main() {
         blockedReason = null,
         stageEnteredHoursAgo = 1,
         approvedByUserId = null,
+        laborGuideItemId = null,
       } = opts;
       const totalPriceCents = Math.round(laborHours * laborRateCents) + partsPriceCents;
       const { rows } = await client.query(
         `INSERT INTO ro_lines (ro_id, title, description, labor_hours, labor_rate_cents, parts_cost_cents, parts_price_cents,
                                 total_price_cents, stage, approval_status, tech_id, blocked_reason, stage_entered_at,
-                                approved_by_user_id, approved_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`,
+                                approved_by_user_id, approved_at, labor_guide_item_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
         [
           roId,
           title,
@@ -124,6 +156,7 @@ async function main() {
           hoursAgo(stageEnteredHoursAgo),
           approvedByUserId,
           approvalStatus === 'approved' ? hoursAgo(stageEnteredHoursAgo) : null,
+          laborGuideItemId,
         ]
       );
       const lineId = rows[0].id;
@@ -181,6 +214,7 @@ async function main() {
       stage: 'approval',
       approvalStatus: 'pending',
       stageEnteredHoursAgo: 26,
+      laborGuideItemId: laborGuideIds['Windshield replacement'],
     });
     const l3b = await createLine(ro3, {
       title: 'Interior detail',
@@ -225,6 +259,7 @@ async function main() {
       techId: tech2,
       stageEnteredHoursAgo: 10,
       approvedByUserId: metroManager,
+      laborGuideItemId: laborGuideIds['Brake pad replacement (front)'],
     });
     await createLine(ro4, {
       title: 'Aftermarket spoiler install',
@@ -246,7 +281,7 @@ async function main() {
     // 5. Grid Auto Sales (internal) — blocked on parts, >48h (red)
     const v5 = await createVehicle(grid.id, '2T1BURHE0JC012345', 2018, 'Toyota', 'Corolla', 'LE', 'GA-2001', 'Gray', 61000);
     const ro5 = await createRO(v5, grid.id, 'active', 60, '2026-09-14');
-    await createLine(ro5, {
+    const l5 = await createLine(ro5, {
       title: 'Alternator replacement',
       laborHours: 2.5,
       laborRateCents: 9500,
@@ -258,7 +293,13 @@ async function main() {
       blockedReason: 'parts',
       stageEnteredHoursAgo: 52,
       approvedByUserId: userIds['manager@gridauto.dev'],
+      laborGuideItemId: laborGuideIds['Alternator replacement'],
     });
+    await client.query(
+      `INSERT INTO parts_orders (ro_line_id, vendor, description, cost_cents, eta_date, status, bin_location, created_at)
+       VALUES ($1, 'NAPA Auto Parts', 'Alternator - remanufactured', 18000, CURRENT_DATE + INTERVAL '2 days', 'ordered', 'B-14', $2)`,
+      [l5, hoursAgo(50)]
+    );
 
     // 6. Grid Auto Sales — mid pipeline, body/paint
     const v6 = await createVehicle(grid.id, 'JTDKN3DU0D1012345', 2020, 'Toyota', 'Prius', 'Two', 'GA-2002', 'Red', 39000);
@@ -303,6 +344,47 @@ async function main() {
       stageEnteredHoursAgo: 4,
       approvedByUserId: metroManager,
     });
+
+    // 9. Metro — delivered, with a full stage history for analytics demo data
+    const v9 = await createVehicle(metro.id, '2FMDK3JC8CBA12345', 2019, 'Ford', 'Edge', 'SEL', 'MA-1007', 'Gray', 51000);
+    const ro9 = await createRO(v9, metro.id, 'delivered', 168, '2026-09-04', 24);
+    const l9 = await createLine(ro9, {
+      title: 'Full mechanical + detail',
+      laborHours: 6,
+      laborRateCents: 13500,
+      stage: 'ready',
+      approvalStatus: 'approved',
+      techId: tech1,
+      stageEnteredHoursAgo: 30,
+      approvedByUserId: metroManager,
+    });
+    // Backfill a realistic stage history: inspection -> estimate -> approval
+    // (dealer-wait) -> mechanical (touch) -> qc -> ready, so the cycle-time
+    // decomposition chart has more than one data point to show.
+    await client.query(`DELETE FROM stage_events WHERE ro_line_id = $1`, [l9]);
+    const l9History = [
+      { from: null, to: 'inspection', hoursAgo: 168 },
+      { from: 'inspection', to: 'estimate', hoursAgo: 160 },
+      { from: 'estimate', to: 'approval', hoursAgo: 150 },
+      { from: 'approval', to: 'mechanical', hoursAgo: 110 },
+      { from: 'mechanical', to: 'qc', hoursAgo: 40 },
+      { from: 'qc', to: 'ready', hoursAgo: 30 },
+    ];
+    for (const ev of l9History) {
+      await client.query(
+        `INSERT INTO stage_events (ro_line_id, from_stage, to_stage, user_id, created_at) VALUES ($1,$2,$3,$4,$5)`,
+        [l9, ev.from, ev.to, advisor, hoursAgo(ev.hoursAgo)]
+      );
+    }
+    const { rows: ro9InvoiceRows } = await client.query(
+      `INSERT INTO invoices (ro_id, dealer_id, subtotal_cents, tax_cents, total_cents, status, sent_at, paid_at, created_at)
+       VALUES ($1,$2,81000,0,81000,'paid',$3,$3,$3) RETURNING id`,
+      [ro9, metro.id, hoursAgo(20)]
+    );
+    await client.query(
+      `INSERT INTO documents (vehicle_id, dealer_id, type, ref_id, title, created_at) VALUES ($1,$2,'invoice',$3,'Invoice — MA-1007',$4)`,
+      [v9, metro.id, ro9InvoiceRows[0].id, hoursAgo(20)]
+    );
 
     console.log('Seeding default alert preferences for dealer users...');
     const eventTypes = [

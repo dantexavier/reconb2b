@@ -55,6 +55,19 @@ async function handleGet(req, res, ro) {
 
   const { rows: invoices } = await query(`SELECT * FROM invoices WHERE ro_id = $1 ORDER BY created_at DESC`, [ro.id]);
 
+  const { rows: partsOrders } = await query(
+    `SELECT po.* FROM parts_orders po JOIN ro_lines rl ON rl.id = po.ro_line_id WHERE rl.ro_id = $1 ORDER BY po.created_at DESC`,
+    [ro.id]
+  );
+
+  const { rows: qcChecks } = await query(
+    `SELECT qc.*, u.name AS checked_by_name FROM qc_checks qc
+     JOIN ro_lines rl ON rl.id = qc.ro_line_id
+     LEFT JOIN users u ON u.id = qc.checked_by_user_id
+     WHERE rl.ro_id = $1 ORDER BY qc.created_at DESC`,
+    [ro.id]
+  );
+
   // Comeback documentation: declined lines from any prior RO for the same VIN.
   const { rows: comebackLines } = await query(
     `SELECT rl.id, rl.title, rl.description, rl.stage, rl.created_at, r.id AS ro_id
@@ -66,7 +79,7 @@ async function handleGet(req, res, ro) {
     [ro.vin, ro.id]
   );
 
-  return ok(res, { reconOrder: ro, lines, inspections, snapshots, stageEvents, invoices, comebackLines });
+  return ok(res, { reconOrder: ro, lines, inspections, snapshots, stageEvents, invoices, comebackLines, partsOrders, qcChecks });
 }
 
 async function handlePatch(req, res, ro) {

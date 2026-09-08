@@ -81,6 +81,24 @@ CREATE INDEX idx_vehicles_vin ON vehicles(vin);
 CREATE INDEX idx_vehicles_stock_number ON vehicles(stock_number);
 
 -- ---------------------------------------------------------------------------
+-- Labor guide — canned jobs advisors pick from when building an estimate,
+-- instead of typing labor hours/parts cost from scratch every time.
+-- ---------------------------------------------------------------------------
+CREATE TABLE labor_guide_items (
+  id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title                  TEXT NOT NULL,
+  category               TEXT NOT NULL DEFAULT 'custom'
+                           CHECK (category IN ('mechanical', 'body_paint', 'detail', 'glass', 'electrical', 'custom')),
+  default_labor_hours    NUMERIC(6,2) NOT NULL DEFAULT 0,
+  default_parts_cost_cents INTEGER NOT NULL DEFAULT 0,
+  description            TEXT,
+  active                 BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_labor_guide_items_active ON labor_guide_items(active);
+
+-- ---------------------------------------------------------------------------
 -- Recon orders
 -- ---------------------------------------------------------------------------
 CREATE TABLE recon_orders (
@@ -124,6 +142,8 @@ CREATE TABLE ro_lines (
   blocked_reason      TEXT
                         CHECK (blocked_reason IS NULL OR blocked_reason IN ('parts', 'approval', 'sublet', 'payment')),
   stage_entered_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  labor_guide_item_id UUID REFERENCES labor_guide_items(id),
+  last_reminder_sent_at TIMESTAMPTZ,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -151,7 +171,7 @@ CREATE TABLE stage_events (
 CREATE INDEX idx_stage_events_ro_line_id ON stage_events(ro_line_id);
 
 -- ---------------------------------------------------------------------------
--- Parts orders (Phase 2 feature surface — table only, no API/UI yet)
+-- Parts orders
 -- ---------------------------------------------------------------------------
 CREATE TABLE parts_orders (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -167,6 +187,21 @@ CREATE TABLE parts_orders (
 );
 
 CREATE INDEX idx_parts_orders_ro_line_id ON parts_orders(ro_line_id);
+
+-- ---------------------------------------------------------------------------
+-- QC checks — one row per completed QC pass/fail on a line
+-- ---------------------------------------------------------------------------
+CREATE TABLE qc_checks (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ro_line_id   UUID NOT NULL REFERENCES ro_lines(id) ON DELETE CASCADE,
+  checklist    JSONB NOT NULL DEFAULT '[]',
+  passed       BOOLEAN NOT NULL,
+  notes        TEXT,
+  checked_by_user_id UUID REFERENCES users(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_qc_checks_ro_line_id ON qc_checks(ro_line_id);
 
 -- ---------------------------------------------------------------------------
 -- Invoices (Phase 3 payment processing — status tracking only in Phase 1)

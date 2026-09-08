@@ -63,7 +63,27 @@ async function recalcPromiseDate(roId, actorUser) {
 
   const dailyCapacity = Number(await getSetting('daily_capacity_hours', 24));
   const workingDays = await getSetting('working_days', ['mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
-  const partsEtaDays = waitingOnParts ? Number(await getSetting('default_parts_eta_days', 3)) : 0;
+
+  let partsEtaDays = 0;
+  if (waitingOnParts) {
+    // Prefer the real ETA on open parts orders for this RO; fall back to
+    // the flat setting when a line is flagged blocked_reason='parts' but
+    // has no parts order recorded yet.
+    const { rows: etaRows } = await query(
+      `SELECT MAX(po.eta_date) AS max_eta
+       FROM parts_orders po
+       JOIN ro_lines rl ON rl.id = po.ro_line_id
+       WHERE rl.ro_id = $1 AND po.status = 'ordered' AND po.eta_date IS NOT NULL`,
+      [roId]
+    );
+    const maxEta = etaRows[0].max_eta;
+    if (maxEta) {
+      const daysUntilEta = Math.ceil((new Date(maxEta) - new Date()) / (24 * 3600 * 1000));
+      partsEtaDays = Math.max(daysUntilEta, 0);
+    } else {
+      partsEtaDays = Number(await getSetting('default_parts_eta_days', 3));
+    }
+  }
 
   const businessDaysNeeded = Math.ceil(totalHours / dailyCapacity) + partsEtaDays;
   const newPromiseDate = toDateOnly(addWorkingDays(new Date(), businessDaysNeeded, workingDays));

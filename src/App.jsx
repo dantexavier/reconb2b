@@ -9,6 +9,7 @@ import Board from './pages/shop/Board';
 import Intake from './pages/shop/Intake';
 import RODetail from './pages/shop/RODetail';
 import Dealers from './pages/shop/Dealers';
+import LaborGuide from './pages/shop/LaborGuide';
 import Analytics from './pages/shop/Analytics';
 import TechView from './pages/shop/TechView';
 
@@ -49,6 +50,7 @@ export default function App() {
                 <Route path="intake" element={<Intake />} />
                 <Route path="ro/:id" element={<RODetail />} />
                 <Route path="dealers" element={<Dealers />} />
+                <Route path="labor-guide" element={<LaborGuide />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="tech" element={<TechView />} />
               </Route>

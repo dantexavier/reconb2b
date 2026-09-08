@@ -91,9 +91,6 @@ async function handlePatch(req, res, line) {
       [line.id, line.stage, next.stage, req.user.id]
     );
 
-    if (next.stage === 'qc') {
-      await notify('qc_passed', { dealerId: line.dealer_id, vehicleLabel: vehicleLabel(line) }, req.user);
-    }
     if (next.stage === 'ready') {
       const { rows: remaining } = await query(
         `SELECT COUNT(*) AS c FROM ro_lines WHERE ro_id = $1 AND stage != 'ready' AND approval_status != 'declined'`,

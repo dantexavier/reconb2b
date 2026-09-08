@@ -73,8 +73,8 @@ async function handleCreate(req, res) {
   const totalPriceCents = Math.round(laborHours * laborRateCents) + partsPriceCents;
 
   const { rows } = await query(
-    `INSERT INTO ro_lines (ro_id, title, description, finding_photos, labor_hours, labor_rate_cents, parts_cost_cents, parts_price_cents, total_price_cents, stage)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `INSERT INTO ro_lines (ro_id, title, description, finding_photos, labor_hours, labor_rate_cents, parts_cost_cents, parts_price_cents, total_price_cents, stage, labor_guide_item_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      RETURNING *`,
     [
       b.roId,
@@ -87,6 +87,7 @@ async function handleCreate(req, res) {
       partsPriceCents,
       totalPriceCents,
       b.stage || 'estimate',
+      b.laborGuideItemId || null,
     ]
   );
   const line = rows[0];

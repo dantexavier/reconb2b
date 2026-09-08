@@ -4,11 +4,18 @@ Shop management system for Grid Auto Recon LLC — an internal shop app for
 running the recon pipeline and a dealer portal for live status, estimate
 approvals, and permanent documents.
 
-Phase 1 (this build): auth + roles, dealer CRUD + rate cards, VIN-decode
-intake, RO/lines, kanban board with stage transitions + audit trail,
-estimate builder, inspection capture, estimate snapshots + versioning,
-dealer portal with approvals + document library, promise date engine v1,
-notification service (mock SMS), seed data.
+**Phase 1:** auth + roles, dealer CRUD + rate cards, VIN-decode intake,
+RO/lines, kanban board with stage transitions + audit trail, estimate
+builder, inspection capture, estimate snapshots + versioning, dealer portal
+with approvals + document library, promise date engine v1, notification
+service (mock SMS), seed data.
+
+**Phase 2 (in progress):** a labor guide (canned jobs advisors pick from
+instead of typing hours from scratch), parts ordering with ETA-driven
+promise-date recalculation, a QC checklist gate before a line can reach
+"ready," an approval-escalation cron, and an analytics dashboard (cycle-time
+decomposition, throughput, approval rate by job category, per-dealer
+revenue/cycle-time/response-time, filterable internal vs. customer-pay).
 
 ## Stack
 
@@ -19,6 +26,7 @@ notification service (mock SMS), seed data.
   server-side on every route
 - SMS via Twilio, or logged to the console when `MOCK_SMS=true`
 - VIN decode via the NHTSA vPIC API (called client-side, no key required)
+- Vercel Cron for the daily approval-escalation job
 
 ## Local setup
 
@@ -38,10 +46,18 @@ notification service (mock SMS), seed data.
    npm run db:seed
    ```
 
+   **`db:migrate` drops and recreates the entire `public` schema every time**
+   — the schema is still under active change, so this trades "always matches
+   schema.sql" for "destroys existing data." Always follow it with
+   `db:seed`. Don't run `db:migrate` again later without expecting to reseed.
+
    The seed script creates 2 dealers (Metro Auto Group, and Grid Auto Sales
-   as the internal dealer), a user for every role, and 8 vehicles spread
-   across the pipeline. All seeded users share the password `password123` —
-   see the seed script's console output for the full login list.
+   as the internal dealer), a user for every role, a starter labor guide
+   catalog, and 9 vehicles — 8 spread across the pipeline stages plus one
+   already-delivered vehicle with a full stage history so the analytics
+   charts have more than one data point. All seeded users share the password
+   `password123` — see the seed script's console output for the full login
+   list.
 
 4. Run the app. The frontend (Vite) and the `/api` serverless functions need
    to be served together — the simplest way is the Vercel CLI:
@@ -55,27 +71,40 @@ notification service (mock SMS), seed data.
    --listen 3000` in a second terminal — `vite.config.js` proxies `/api` to
    `localhost:3000` for that setup.
 
+5. (Optional, production only) Set a `CRON_SECRET` env var in your Vercel
+   project so the approval-escalation cron (`vercel.json` → `crons`) is
+   authenticated — Vercel sends it automatically as a bearer token on cron
+   requests. Without it the endpoint runs unauthenticated locally, which is
+   fine for `vercel dev`.
+
 ## Project layout
 
 - `db/schema.sql` — full Postgres schema
 - `db/migrate.js` — runs schema.sql via `pg` (no `psql` CLI required)
-- `db/seed.js` — Phase 1 seed data
+- `db/seed.js` — seed data
 - `api/` — one file per REST endpoint (Vercel serverless functions); `api/_lib`
   holds shared helpers (db pool, session auth, notify service, promise date
   engine, estimate snapshot writer). `api/package.json` pins this subtree to
   CommonJS since the root project is `"type": "module"`.
+- `api/cron/approval-escalation.js` — Vercel Cron target, scheduled in
+  `vercel.json`
 - `src/pages/shop/*` — internal shop app (`/shop/...`)
 - `src/pages/portal/*` — dealer portal (`/portal/...`)
 
-## Known Phase 1 limitations
+## Known limitations
 
 - Photos are captured as base64 data URLs stored directly in Postgres jsonb
   columns — fine for demo volumes, but should move to real object storage
   (e.g. Vercel Blob) before production use.
-- Analytics, QC checklists, parts ordering + ETA-driven promise recalc, and
-  the approval-escalation cron are Phase 2 per the build plan. `parts_orders`
-  exists in the schema for forward compatibility but has no API/UI yet.
-- Invoicing exists only as status tracking (draft/sent) — ACH payment via
-  Stripe is Phase 3.
+- Invoicing exists only as status tracking (draft/sent/paid) — ACH payment
+  via Stripe is Phase 3.
 - The promise date engine recalculates the RO it's called for; it doesn't
   cascade to every RO behind it in the queue (kept simple per the v1 spec).
+- The approval-escalation cron is scheduled daily (`0 9 * * *`) rather than
+  hourly — Vercel's Hobby plan only allows daily cron jobs. A line pending
+  >24h gets its reminder at the next daily run, not the instant it crosses
+  24h. Upgrade the schedule if you're on a Pro plan and want finer granularity.
+- Cycle-time-by-week attributes a whole stage duration to the week it
+  started in rather than splitting it across a week boundary — a reasonable
+  v1 simplification, revisit if week-over-week numbers look off near
+  boundaries.

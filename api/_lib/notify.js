@@ -100,4 +100,9 @@ async function notify(eventType, context, actor) {
   return results;
 }
 
-module.exports = { notify };
+function buildMessage(eventType, context) {
+  const messageBuilder = EVENT_MESSAGES[eventType] || (() => `ReconOS: ${eventType}`);
+  return messageBuilder(context);
+}
+
+module.exports = { notify, sendSms, sendEmail, buildMessage };

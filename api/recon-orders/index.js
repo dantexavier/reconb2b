@@ -105,8 +105,8 @@ async function handleCreate(req, res) {
 
     for (const line of lines) {
       await client.query(
-        `INSERT INTO ro_lines (ro_id, title, description, labor_hours, labor_rate_cents, parts_cost_cents, parts_price_cents, total_price_cents, stage)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inspection')`,
+        `INSERT INTO ro_lines (ro_id, title, description, labor_hours, labor_rate_cents, parts_cost_cents, parts_price_cents, total_price_cents, stage, labor_guide_item_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'inspection',$9)`,
         [
           ro.id,
           line.title || 'Untitled line',
@@ -116,6 +116,7 @@ async function handleCreate(req, res) {
           line.partsCostCents || 0,
           line.partsPriceCents || 0,
           computeLineTotal(line),
+          line.laborGuideItemId || null,
         ]
       );
     }
