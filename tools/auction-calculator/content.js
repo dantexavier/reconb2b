@@ -193,7 +193,7 @@
       applyLayout();
       save();
     });
-    els.close.addEventListener('click', () => chrome.storage.local.set({ visible: false }));
+    els.close.addEventListener('click', () => chrome.runtime.sendMessage({ type: 'hide' }));
 
     enableDrag();
     document.documentElement.appendChild(host);
@@ -303,15 +303,21 @@
     }
   }
 
-  chrome.storage.local.get(['visible', 'values', 'opacity', 'pos', 'collapsed']).then((s) => {
+  chrome.storage.local.get(['values', 'opacity', 'pos', 'collapsed']).then(async (s) => {
     state.values = s.values ?? {};
     state.opacity = s.opacity ?? 0.8;
     state.pos = s.pos ?? state.pos;
     state.collapsed = s.collapsed ?? false;
-    setVisible(!!s.visible);
+    const res = await chrome.runtime.sendMessage({ type: 'getVisible' }).catch(() => null);
+    setVisible(!!res?.visible);
   });
 
-  // Sync across tabs: toggle visibility and pick up values typed in another tab.
+  // Show/hide for this tab only, driven by the background worker.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'setVisible') setVisible(!!msg.visible);
+  });
+
+  // Pick up values typed into the calculator on another tab.
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area !== 'local') return;
     if (ch.values && root) {
@@ -322,7 +328,6 @@
       }
       render();
     }
-    if (ch.visible) setVisible(!!ch.visible.newValue);
   });
 
   window.addEventListener('resize', () => root && applyLayout());

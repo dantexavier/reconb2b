@@ -17,8 +17,10 @@ Max Purchase = (JD Power Clean Trade × 125%) − Target Profit − Transport �
 
 ## Use
 
-- **Show / hide:** click the toolbar icon or press **Alt+Shift+A**. It stays
-  open as you move between listings and tabs.
+- **Show / hide:** click the toolbar icon or press **Alt+Shift+A**. It opens
+  only on the tab you clicked it in, and stays open on that tab as you click
+  through listings. Numbers you've typed carry over if you open it on
+  another tab.
 - **Move it:** drag the title bar. **–** collapses it to just the max-buy number.
 - **Transparency:** slider at the bottom. It turns fully solid while your
   mouse is over it.
