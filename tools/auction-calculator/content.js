@@ -4,24 +4,44 @@
   if (window.top !== window || window.__maxBuyCalc) return;
   window.__maxBuyCalc = true;
 
-  const MARKUP = 1.25; // 125% of JD Power Clean Trade
+  // ---- Tunable numbers -------------------------------------------------
+  const MARKUP = 1.25; // bank ceiling = 125% of JD Power Clean Trade
 
-  const FIELDS = [
-    { key: 'cleanTrade', label: 'JD Power Clean Trade', perVehicle: true },
-    { key: 'profit', label: 'Target Profit' },
-    { key: 'transport', label: 'Transport' },
-    { key: 'buyFee', label: 'Buy Fee' },
-    { key: 'recon', label: 'Est. Recon', perVehicle: true },
+  // Market days supply → where to price vs. market, and how long it takes to sell.
+  const MDS_BANDS = [
+    { below: 30, factor: 1.0, days: 20, label: 'Hot' },
+    { below: 60, factor: 1.0, days: 35, label: 'Normal' },
+    { below: 90, factor: 0.97, days: 55, label: 'Slow' },
+    { below: Infinity, factor: 0.94, days: 75, label: 'Oversupplied' },
   ];
 
+  // Deal grade cutoffs (gross profit per day on the lot; no holding cost yet).
+  const GRADE = { A: 60, B: 35, C: 15 }; // $/day
+  const A_MAX_COST_TO_MARKET = 0.85; // an A also needs all-in cost ≤ 85% of market
+  // ----------------------------------------------------------------------
+
+  const FIELDS = {
+    cleanTrade: { label: 'JD Power Clean Trade', perVehicle: true },
+    market: { label: 'Market Value', perVehicle: true },
+    mds: { label: 'Market Days Supply', perVehicle: true, kind: 'days' },
+    profit: { label: 'Target Profit' },
+    transport: { label: 'Transport' },
+    buyFee: { label: 'Buy Fee' },
+    recon: { label: 'Est. Recon', perVehicle: true },
+    bid: { label: 'Bid / Price', perVehicle: true },
+  };
+  const KEYS = Object.keys(FIELDS);
+
   const money = (n) =>
-    (n < 0 ? '-$' : '$') +
-    Math.abs(Math.round(n)).toLocaleString('en-US');
+    (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+  const pct = (n) => Math.round(n * 100) + '%';
 
   const parse = (s) => {
     const n = parseFloat(String(s ?? '').replace(/[^0-9.\-]/g, ''));
     return Number.isFinite(n) ? n : 0;
   };
+  const format = (key, s) =>
+    FIELDS[key].kind === 'days' ? String(Math.round(parse(s))) : money(parse(s));
 
   let root = null;
   let els = {};
@@ -43,7 +63,7 @@
   const CSS = `
     :host { all: initial; }
     .panel {
-      position: fixed; z-index: 2147483647; width: 290px;
+      position: fixed; z-index: 2147483647; width: 300px;
       font: 13px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       color: #f1f5f9; background: rgba(15, 23, 42, 0.92);
       border: 1px solid rgba(148, 163, 184, 0.35); border-radius: 12px;
@@ -62,7 +82,10 @@
       display: grid; place-items: center; color: #cbd5e1; font-size: 14px;
     }
     .hbtn:hover { background: rgba(148,163,184,.2); color: #fff; }
-    .body { padding: 10px; display: grid; gap: 7px; }
+    .body {
+      padding: 10px; display: grid; gap: 6px;
+      max-height: calc(100vh - 140px); overflow-y: auto;
+    }
     .collapsed .body { display: none; }
     .collapsed .head { border-bottom: 0; }
     .mini { display: none; font-weight: 700; color: #4ade80; font-size: 13px; }
@@ -76,8 +99,11 @@
       user-select: text;
     }
     input[type=text]:focus { border-color: #60a5fa; background: rgba(255,255,255,.13); }
-    .calc { display: flex; justify-content: space-between; color: #94a3b8; font-variant-numeric: tabular-nums; padding: 0 2px; }
-    .calc b { color: #e2e8f0; font-weight: 600; }
+    .calc { display: flex; justify-content: space-between; gap: 8px; color: #94a3b8; font-variant-numeric: tabular-nums; padding: 0 2px; }
+    .calc b { color: #e2e8f0; font-weight: 600; text-align: right; }
+    .calc.strong span { color: #cbd5e1; } .calc.strong b { color: #fff; }
+    .warn { color: #fbbf24; font-size: 11px; padding: 0 2px; display: none; }
+    .warn.on { display: block; }
     .sep { height: 1px; background: rgba(148,163,184,.25); margin: 2px 0; }
     .result {
       display: flex; justify-content: space-between; align-items: baseline;
@@ -88,6 +114,24 @@
     .result b { font-size: 20px; color: #4ade80; font-variant-numeric: tabular-nums; }
     .result.neg { background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.45); }
     .result.neg span { color: #fecaca; } .result.neg b { color: #f87171; }
+    .deal {
+      display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: center;
+      padding: 8px; border-radius: 8px; background: rgba(255,255,255,.05);
+      border: 1px solid rgba(148,163,184,.25);
+    }
+    .grade {
+      height: 52px; border-radius: 8px; display: grid; place-items: center;
+      font-size: 28px; font-weight: 800; color: #0f172a; background: #475569;
+    }
+    .grade.small { font-size: 11px; font-weight: 600; color: #cbd5e1; text-align: center; line-height: 1.2; }
+    .grade.A { background: #4ade80; } .grade.B { background: #60a5fa; }
+    .grade.C { background: #fbbf24; } .grade.D { background: #f87171; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-variant-numeric: tabular-nums; }
+    .stats div { display: flex; flex-direction: column; }
+    .stats span { color: #94a3b8; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
+    .stats b { color: #f1f5f9; font-size: 13px; }
+    .stats b.neg { color: #f87171; }
+    .dealnote { color: #94a3b8; font-size: 11px; text-align: center; }
     .btns { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
     .btn {
       all: unset; cursor: pointer; text-align: center; padding: 8px 10px; border-radius: 8px;
@@ -101,19 +145,17 @@
     .opacity input { flex: 1; accent-color: #60a5fa; }
   `;
 
+  const row = (key) => `
+    <div class="row">
+      <label for="${key}">${FIELDS[key].label}</label>
+      <input type="text" id="${key}" inputmode="decimal"
+        placeholder="${FIELDS[key].kind === 'days' ? 'days' : '$0'}" autocomplete="off">
+    </div>`;
+
   function build() {
     const host = document.createElement('div');
     host.id = 'max-buy-calculator-host';
     const shadow = host.attachShadow({ mode: 'closed' });
-
-    const rows = FIELDS.map(
-      (f) => `
-        <div class="row">
-          <label for="${f.key}">${f.label}</label>
-          <input type="text" id="${f.key}" inputmode="decimal" placeholder="$0" autocomplete="off">
-        </div>
-        ${f.key === 'cleanTrade' ? `<div class="calc"><span>125% of Clean Trade</span><b id="marked">$0</b></div><div class="sep"></div>` : ''}`
-    ).join('');
 
     shadow.innerHTML = `
       <style>${CSS}</style>
@@ -125,12 +167,35 @@
           <button class="hbtn" id="close" title="Hide (Alt+Shift+A)">×</button>
         </div>
         <div class="body">
-          ${rows}
+          ${row('cleanTrade')}
+          <div class="calc"><span>Bank ceiling (125%)</span><b id="ceiling">$0</b></div>
+          ${row('market')}
+          ${row('mds')}
+          <div class="calc"><span id="bandLabel">Market pace</span><b id="bandInfo">—</b></div>
+          <div class="calc strong"><span>Expected sale price</span><b id="sale">$0</b></div>
+          <div class="warn" id="capWarn">Market is above the bank ceiling: priced at the bank cap.</div>
+          <div class="sep"></div>
+          ${row('profit')}
+          ${row('transport')}
+          ${row('buyFee')}
+          ${row('recon')}
           <div class="sep"></div>
           <div class="result" id="result"><span>Max Purchase</span><b id="max">$0</b></div>
+          <div class="sep"></div>
+          ${row('bid')}
+          <div class="deal">
+            <div class="grade" id="grade">–</div>
+            <div class="stats">
+              <div><span>Profit</span><b id="dProfit">–</b></div>
+              <div><span>Per day</span><b id="dPerDay">–</b></div>
+              <div><span>Cost to mkt</span><b id="dCtm">–</b></div>
+              <div><span>ROI</span><b id="dRoi">–</b></div>
+            </div>
+          </div>
+          <div class="dealnote" id="dealNote"></div>
           <div class="btns">
             <button class="btn" id="copy">Copy to Notes</button>
-            <button class="btn ghost" id="clear" title="Clear Clean Trade + Recon for the next vehicle">New</button>
+            <button class="btn ghost" id="clear" title="Clear the per-car fields for the next vehicle">New</button>
           </div>
           <div class="opacity">
             <span>Transparency</span>
@@ -141,11 +206,13 @@
 
     const $ = (id) => shadow.getElementById(id);
     els = {
-      host, panel: $('panel'), head: $('head'), mini: $('mini'),
-      marked: $('marked'), max: $('max'), result: $('result'),
-      copy: $('copy'), clear: $('clear'), opacity: $('opacity'),
-      collapse: $('collapse'), close: $('close'),
-      inputs: Object.fromEntries(FIELDS.map((f) => [f.key, $(f.key)])),
+      host,
+      ...Object.fromEntries(
+        ['panel', 'head', 'mini', 'ceiling', 'bandLabel', 'bandInfo', 'sale', 'capWarn',
+          'max', 'result', 'grade', 'dProfit', 'dPerDay', 'dCtm', 'dRoi', 'dealNote',
+          'copy', 'clear', 'opacity', 'collapse', 'close'].map((id) => [id, $(id)])
+      ),
+      inputs: Object.fromEntries(KEYS.map((k) => [k, $(k)])),
     };
 
     // Keep the auction site's keyboard shortcuts from firing while typing here.
@@ -153,18 +220,18 @@
       els.panel.addEventListener(t, (e) => e.stopPropagation());
     }
 
-    for (const f of FIELDS) {
-      const input = els.inputs[f.key];
-      input.value = state.values[f.key] ?? '';
+    for (const key of KEYS) {
+      const input = els.inputs[key];
+      input.value = state.values[key] ?? '';
       input.addEventListener('input', () => {
-        state.values[f.key] = input.value;
+        state.values[key] = input.value;
         render();
         save();
       });
       input.addEventListener('blur', () => {
         if (input.value.trim() !== '') {
-          input.value = money(parse(input.value));
-          state.values[f.key] = input.value;
+          input.value = format(key, input.value);
+          state.values[key] = input.value;
           save();
         }
       });
@@ -180,9 +247,9 @@
 
     els.copy.addEventListener('click', copyNote);
     els.clear.addEventListener('click', () => {
-      for (const f of FIELDS.filter((f) => f.perVehicle)) {
-        state.values[f.key] = '';
-        els.inputs[f.key].value = '';
+      for (const key of KEYS.filter((k) => FIELDS[k].perVehicle)) {
+        state.values[key] = '';
+        els.inputs[key].value = '';
       }
       render();
       save();
@@ -202,29 +269,106 @@
   }
 
   function compute() {
-    const v = Object.fromEntries(FIELDS.map((f) => [f.key, parse(state.values[f.key])]));
-    const marked = v.cleanTrade * MARKUP;
-    const max = marked - v.profit - v.transport - v.buyFee - v.recon;
-    return { ...v, marked, max };
+    const v = Object.fromEntries(KEYS.map((k) => [k, parse(state.values[k])]));
+
+    const ceiling = v.cleanTrade * MARKUP;
+    const band = v.mds > 0 ? MDS_BANDS.find((b) => v.mds < b.below) : null;
+    const marketPrice = v.market > 0 ? v.market * (band ? band.factor : 1) : 0;
+
+    // Sale price = lower of the bank ceiling and the (MDS-adjusted) market value.
+    let sale = 0;
+    if (ceiling > 0 && marketPrice > 0) sale = Math.min(ceiling, marketPrice);
+    else sale = ceiling || marketPrice;
+    const capped = ceiling > 0 && marketPrice > ceiling;
+
+    const costs = v.transport + v.buyFee + v.recon;
+    const max = sale - v.profit - costs;
+
+    // Grade the deal at the bid if one is entered, otherwise at the max buy.
+    const atBid = v.bid > 0;
+    const price = atBid ? v.bid : max;
+    const allIn = price + costs;
+    const dealProfit = sale - allIn;
+    const days = band ? band.days : null;
+    const perDay = days ? dealProfit / days : null;
+    const ctm = v.market > 0 && allIn > 0 ? allIn / v.market : null;
+    const roi = allIn > 0 ? dealProfit / allIn : null;
+
+    let grade = null;
+    if (sale > 0 && perDay != null) {
+      if (dealProfit <= 0) grade = 'D';
+      else if (perDay >= GRADE.A && (ctm == null || ctm <= A_MAX_COST_TO_MARKET)) grade = 'A';
+      else if (perDay >= GRADE.B) grade = 'B';
+      else if (perDay >= GRADE.C) grade = 'C';
+      else grade = 'D';
+    }
+
+    return { ...v, ceiling, band, sale, capped, costs, max, atBid, price, allIn,
+      dealProfit, days, perDay, ctm, roi, grade };
   }
 
   function render() {
     const c = compute();
-    els.marked.textContent = money(c.marked);
+    els.ceiling.textContent = money(c.ceiling);
+    if (c.band) {
+      els.bandLabel.textContent = `${c.band.label} market`;
+      els.bandInfo.textContent = `${pct(c.band.factor)} of mkt · ~${c.band.days} days`;
+    } else {
+      els.bandLabel.textContent = 'Market pace';
+      els.bandInfo.textContent = 'enter MDS';
+    }
+    els.sale.textContent = money(c.sale);
+    els.capWarn.classList.toggle('on', c.capped);
+
     els.max.textContent = money(c.max);
-    els.mini.textContent = money(c.max);
     els.result.classList.toggle('neg', c.max < 0);
+
+    const ready = c.sale > 0;
+    els.dProfit.textContent = ready ? money(c.dealProfit) : '–';
+    els.dProfit.classList.toggle('neg', ready && c.dealProfit < 0);
+    els.dPerDay.textContent = ready && c.perDay != null ? money(c.perDay) + '/day' : '–';
+    els.dCtm.textContent = ready && c.ctm != null ? pct(c.ctm) : '–';
+    els.dRoi.textContent = ready && c.roi != null ? pct(c.roi) : '–';
+
+    els.grade.className = 'grade';
+    if (c.grade) {
+      els.grade.textContent = c.grade;
+      els.grade.classList.add(c.grade);
+    } else {
+      els.grade.textContent = ready ? 'Add MDS' : '–';
+      if (ready) els.grade.classList.add('small');
+    }
+    els.dealNote.textContent = ready
+      ? `Graded at ${c.atBid ? `your bid of ${money(c.price)}` : `the max buy`}` +
+        (c.days ? ` · sells in ~${c.days} days` : '')
+      : '';
+
+    els.mini.textContent = money(c.max) + (c.grade ? ` · ${c.grade}` : '');
   }
 
   function noteText() {
     const c = compute();
     const date = new Date().toLocaleDateString('en-US');
-    return (
-      `MAX BUY: ${money(c.max)} | ` +
-      `JDP Clean Trade ${money(c.cleanTrade)} x125% = ${money(c.marked)} | ` +
-      `Profit ${money(c.profit)} | Transport ${money(c.transport)} | ` +
-      `Buy Fee ${money(c.buyFee)} | Recon ${money(c.recon)} | ${date}`
+    const parts = [`MAX BUY: ${money(c.max)}`];
+    if (c.grade) {
+      parts.push(
+        `Grade ${c.grade} at ${c.atBid ? `bid ${money(c.price)}` : 'max buy'}: ` +
+          `profit ${money(c.dealProfit)}, ${money(c.perDay)}/day` +
+          (c.ctm != null ? `, ${pct(c.ctm)} cost-to-mkt` : '')
+      );
+    }
+    parts.push(`Sale ${money(c.sale)}${c.capped ? ' (bank cap)' : ''}`);
+    if (c.cleanTrade) parts.push(`JDP CT ${money(c.cleanTrade)} x125% = ${money(c.ceiling)}`);
+    if (c.market) parts.push(`Mkt ${money(c.market)}`);
+    if (c.mds) parts.push(`MDS ${Math.round(c.mds)}`);
+    parts.push(
+      `Profit ${money(c.profit)}`,
+      `Transport ${money(c.transport)}`,
+      `Buy Fee ${money(c.buyFee)}`,
+      `Recon ${money(c.recon)}`,
+      date
     );
+    return parts.join(' | ');
   }
 
   async function copyNote() {
@@ -322,9 +466,9 @@
     if (area !== 'local') return;
     if (ch.values && root) {
       state.values = ch.values.newValue ?? {};
-      for (const f of FIELDS) {
-        const input = els.inputs[f.key];
-        if (input !== input.getRootNode().activeElement) input.value = state.values[f.key] ?? '';
+      for (const key of KEYS) {
+        const input = els.inputs[key];
+        if (input !== input.getRootNode().activeElement) input.value = state.values[key] ?? '';
       }
       render();
     }
