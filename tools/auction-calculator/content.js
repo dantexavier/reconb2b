@@ -7,13 +7,15 @@
   // ---- Tunable numbers -------------------------------------------------
   const MARKUP = 1.25; // bank ceiling = 125% of JD Power Clean Trade
 
-  // Market days supply → where to price vs. market, and how long it takes to sell.
+  // Market days supply → where to price vs. market.
   const MDS_BANDS = [
-    { below: 30, factor: 1.0, days: 20, label: 'Hot' },
-    { below: 60, factor: 1.0, days: 35, label: 'Normal' },
-    { below: 90, factor: 0.97, days: 55, label: 'Slow' },
-    { below: Infinity, factor: 0.94, days: 75, label: 'Oversupplied' },
+    { below: 30, factor: 1.0, label: 'Hot' },
+    { below: 60, factor: 1.0, label: 'Normal' },
+    { below: 90, factor: 0.97, label: 'Slow' },
+    { below: Infinity, factor: 0.94, label: 'Oversupplied' },
   ];
+  // Days to sell = market days supply × the "Sell speed" setting (blank = 100%).
+  const DEFAULT_SPEED = 100;
 
   // Deal grade cutoffs (gross profit per day on the lot; no holding cost yet).
   const GRADE = { A: 60, B: 35, C: 15 }; // $/day
@@ -24,6 +26,7 @@
     cleanTrade: { label: 'JD Power Clean Trade', perVehicle: true },
     market: { label: 'Market Value', perVehicle: true },
     mds: { label: 'Market Days Supply', perVehicle: true, kind: 'days' },
+    speed: { label: 'Sell speed (% of MDS)', kind: 'pct' },
     profit: { label: 'Target Profit' },
     transport: { label: 'Transport' },
     buyFee: { label: 'Buy Fee' },
@@ -40,8 +43,13 @@
     const n = parseFloat(String(s ?? '').replace(/[^0-9.\-]/g, ''));
     return Number.isFinite(n) ? n : 0;
   };
-  const format = (key, s) =>
-    FIELDS[key].kind === 'days' ? String(Math.round(parse(s))) : money(parse(s));
+  const format = (key, s) => {
+    const kind = FIELDS[key].kind;
+    if (kind === 'days') return String(Math.round(parse(s)));
+    if (kind === 'pct') return Math.round(parse(s)) + '%';
+    return money(parse(s));
+  };
+  const PLACEHOLDER = { days: 'days', pct: DEFAULT_SPEED + '%' };
 
   let root = null;
   let els = {};
@@ -149,7 +157,7 @@
     <div class="row">
       <label for="${key}">${FIELDS[key].label}</label>
       <input type="text" id="${key}" inputmode="decimal"
-        placeholder="${FIELDS[key].kind === 'days' ? 'days' : '$0'}" autocomplete="off">
+        placeholder="${PLACEHOLDER[FIELDS[key].kind] ?? '$0'}" autocomplete="off">
     </div>`;
 
   function build() {
@@ -171,7 +179,9 @@
           <div class="calc"><span>Bank ceiling (125%)</span><b id="ceiling">$0</b></div>
           ${row('market')}
           ${row('mds')}
-          <div class="calc"><span id="bandLabel">Market pace</span><b id="bandInfo">—</b></div>
+          ${row('speed')}
+          <div class="calc"><span>Sell at</span><b id="sellAt">—</b></div>
+          <div class="calc"><span>Est. days to sell</span><b id="daysInfo">—</b></div>
           <div class="calc strong"><span>Expected sale price</span><b id="sale">$0</b></div>
           <div class="warn" id="capWarn">Market is above the bank ceiling: priced at the bank cap.</div>
           <div class="sep"></div>
@@ -188,7 +198,7 @@
             <div class="stats">
               <div><span>Profit</span><b id="dProfit">–</b></div>
               <div><span>Per day</span><b id="dPerDay">–</b></div>
-              <div><span>Cost to mkt</span><b id="dCtm">–</b></div>
+              <div><span>Your cost</span><b id="dCtm">–</b></div>
               <div><span>ROI</span><b id="dRoi">–</b></div>
             </div>
           </div>
@@ -208,7 +218,7 @@
     els = {
       host,
       ...Object.fromEntries(
-        ['panel', 'head', 'mini', 'ceiling', 'bandLabel', 'bandInfo', 'sale', 'capWarn',
+        ['panel', 'head', 'mini', 'ceiling', 'sellAt', 'daysInfo', 'sale', 'capWarn',
           'max', 'result', 'grade', 'dProfit', 'dPerDay', 'dCtm', 'dRoi', 'dealNote',
           'copy', 'clear', 'opacity', 'collapse', 'close'].map((id) => [id, $(id)])
       ),
@@ -289,7 +299,8 @@
     const price = atBid ? v.bid : max;
     const allIn = price + costs;
     const dealProfit = sale - allIn;
-    const days = band ? band.days : null;
+    const speed = (parse(state.values.speed) || DEFAULT_SPEED) / 100;
+    const days = v.mds > 0 ? Math.max(1, Math.round(v.mds * speed)) : null;
     const perDay = days ? dealProfit / days : null;
     const ctm = v.market > 0 && allIn > 0 ? allIn / v.market : null;
     const roi = allIn > 0 ? dealProfit / allIn : null;
@@ -311,11 +322,11 @@
     const c = compute();
     els.ceiling.textContent = money(c.ceiling);
     if (c.band) {
-      els.bandLabel.textContent = `${c.band.label} market`;
-      els.bandInfo.textContent = `${pct(c.band.factor)} of mkt · ~${c.band.days} days`;
+      els.sellAt.textContent = `${pct(c.band.factor)} of market (${c.band.label.toLowerCase()})`;
+      els.daysInfo.textContent = `~${c.days} days`;
     } else {
-      els.bandLabel.textContent = 'Market pace';
-      els.bandInfo.textContent = 'enter MDS';
+      els.sellAt.textContent = c.market > 0 ? '100% of market' : '—';
+      els.daysInfo.textContent = 'enter MDS';
     }
     els.sale.textContent = money(c.sale);
     els.capWarn.classList.toggle('on', c.capped);
@@ -327,7 +338,7 @@
     els.dProfit.textContent = ready ? money(c.dealProfit) : '–';
     els.dProfit.classList.toggle('neg', ready && c.dealProfit < 0);
     els.dPerDay.textContent = ready && c.perDay != null ? money(c.perDay) + '/day' : '–';
-    els.dCtm.textContent = ready && c.ctm != null ? pct(c.ctm) : '–';
+    els.dCtm.textContent = ready && c.ctm != null ? `${pct(c.ctm)} of mkt` : '–';
     els.dRoi.textContent = ready && c.roi != null ? pct(c.roi) : '–';
 
     els.grade.className = 'grade';
@@ -354,7 +365,8 @@
       parts.push(
         `Grade ${c.grade} at ${c.atBid ? `bid ${money(c.price)}` : 'max buy'}: ` +
           `profit ${money(c.dealProfit)}, ${money(c.perDay)}/day` +
-          (c.ctm != null ? `, ${pct(c.ctm)} cost-to-mkt` : '')
+          (c.ctm != null ? `, cost ${pct(c.ctm)} of mkt` : '') +
+          `, ~${c.days} days`
       );
     }
     parts.push(`Sale ${money(c.sale)}${c.capped ? ' (bank cap)' : ''}`);
