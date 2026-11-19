@@ -174,7 +174,7 @@
           ${row('sellAt')}
           ${row('days')}
           <div class="warn" id="clampWarn"></div>
-          <div class="calc strong"><span>Expected sale price</span><b id="sale">$0</b></div>
+          <div class="calc strong"><span>List price</span><b id="sale">$0</b></div>
           <div class="warn" id="capWarn">Market is above the bank ceiling: priced at the bank cap.</div>
           <div class="sep"></div>
           ${row('profit')}
@@ -309,10 +309,19 @@
     else sale = ceiling || marketPrice;
     const capped = ceiling > 0 && marketPrice > ceiling;
 
-    const costs = v.transport + v.buyFee + v.recon;
-    const max = sale - v.profit - costs;
+    // List price (the working price): round to the nearest $100, then − $5
+    // (e.g. $16,573 → $16,600 → $16,595). Never above the bank ceiling: if
+    // rounding up would cross it, round down instead.
+    let list = 0;
+    if (sale > 0) {
+      list = Math.round(sale / 100) * 100 - 5;
+      if (ceiling > 0 && list > ceiling) list = Math.floor(ceiling / 100) * 100 - 5;
+    }
 
-    return { ...v, ceiling, band, sale, capped, costs, max, mdsDays, days,
+    const costs = v.transport + v.buyFee + v.recon;
+    const max = list - v.profit - costs;
+
+    return { ...v, ceiling, band, sale, list, capped, costs, max, mdsDays, days,
       sellPct, driver, clamped };
   }
 
@@ -332,7 +341,7 @@
     els.clampWarn.textContent = warn;
     els.clampWarn.classList.toggle('on', !!warn);
 
-    els.sale.textContent = money(c.sale);
+    els.sale.textContent = money(c.list);
     els.capWarn.classList.toggle('on', c.capped);
 
     els.max.textContent = money(c.max);
@@ -352,7 +361,7 @@
     const parts = [`MAX BUY: ${money(c.max)}`];
     if (c.days) parts.push(`Sell in ~${c.days} days`);
     parts.push(
-      `Sale ${money(c.sale)}` +
+      `List ${money(c.list)}` +
         (c.capped ? ' (bank cap)' : ` (${fmtPct(c.sellPct)} of mkt)`)
     );
     if (c.cleanTrade) parts.push(`JDP CT ${money(c.cleanTrade)} x125% = ${money(c.ceiling)}`);

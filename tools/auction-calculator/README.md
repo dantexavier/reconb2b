@@ -6,8 +6,13 @@ site (Manheim, ADESA, ACV, OVE, etc.) while you appraise.
 ```
 Bank ceiling   = JD Power Clean Trade × 125%
 Sale price     = lower of the bank ceiling and Market Value × Sell at %
-Max Purchase   = Sale price − Target Profit − Transport − Buy Fee − Est. Recon
+List price     = Sale price rounded to the nearest $100, minus $5   (the working price)
+Max Purchase   = List price − Target Profit − Transport − Buy Fee − Est. Recon
 ```
+
+Example: $16,573 → $16,600 → **$16,595**. The list price never goes over the
+bank ceiling: if rounding up would cross it, it rounds down instead
+($20,469 ceiling → $20,395).
 
 Market Value and Market Days Supply are optional. With only Clean Trade
 filled in, the sale price is the bank ceiling.
@@ -33,11 +38,11 @@ From there, **each 1% you price under that default sells ~10% faster**, and
 each 1% over sells ~10% slower. Sell at is limited to 80–110% of market.
 Example with MDS 53 and market $17,519:
 
-| You type | Other box shows | Sale price |
+| You type | Other box shows | List price |
 |---|---|---|
-| 30 days | 94.6% | $16,573 |
-| 97% | 39 days | $16,993 |
-| 110% | 152 days | $19,271 |
+| 30 days | 94.6% | $16,595 |
+| 97% | 39 days | $16,995 |
+| 110% | 152 days | $19,295 |
 
 The 10% figure is a starting guess. Change `FASTER_PER_POINT` at the top of
 `content.js` once you see how your own price cuts affect speed.
@@ -67,7 +72,7 @@ bands and the price/speed link are at the top of `content.js` under
   mouse is over it.
 - **Copy to Notes:** copies a line like this, ready to paste into the
   auction's notes:
-  `MAX BUY: $10,969 | Sell in ~30 days | Sale $16,573 (94.6% of mkt) | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/19/2026`
+  `MAX BUY: $10,991 | Sell in ~30 days | List $16,595 (94.6% of mkt) | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/19/2026`
 - **New:** clears the per-car fields (Clean Trade, Market Value, MDS, Sell
   at, days to sell, Recon). Profit, Transport and Buy Fee are kept, since they're usually the
   same from car to car.
