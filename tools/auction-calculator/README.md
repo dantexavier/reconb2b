@@ -22,7 +22,9 @@ Enter a **Bid / Price** to grade that bid; leave it blank to grade the max buy.
 | 60–89 (slow) | 97% |
 | 90+ (oversupplied) | 94% |
 
-**Est. days to sell** = Market Days Supply × **Sell speed**. Sell speed
+**Est. days to sell:** type your own estimate, or leave it blank to use
+Market Days Supply × **Sell speed** (the box shows that estimate in grey).
+For the blank case: Sell speed
 defaults to 100% (leave it blank). Once your own sales show your cars sell
 faster or slower than the market, change it: e.g. if you typically sell in
 70% of the market's days supply, enter 70%. It's kept between cars.
@@ -38,6 +40,20 @@ faster or slower than the market, change it: e.g. if you typically sell in
 | B | $35+/day |
 | C | $15+/day |
 | D | under $15/day, or a loss |
+
+### Pay up to, by grade
+
+Under Max Purchase, the calculator works backwards from the days to sell to
+show the most you can pay and still get each grade:
+
+```
+Pay up to (grade) = Sale price − Transport − Buy Fee − Recon − ($/day cutoff × days to sell)
+```
+
+For an A it's also capped so your all-in cost stays at or under 85% of market
+value. Fewer days to sell means you can pay more for the same grade. Max
+Purchase itself is still based on your flat Target Profit, since days don't
+cost anything until holding cost is added.
 
 Holding cost (depreciation, floorplan, lot) is not included yet. The bands
 and grade cutoffs are at the top of `content.js` under "Tunable numbers".
@@ -63,7 +79,7 @@ and grade cutoffs are at the top of `content.js` under "Tunable numbers".
   mouse is over it.
 - **Copy to Notes:** copies a line like this, ready to paste into the
   auction's notes:
-  `MAX BUY: $11,915 | Grade A at bid $11,915: profit $3,500, $66/day, cost 80% of mkt, ~53 days | Sale $17,519 | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/18/2026`
-- **New:** clears the per-car fields (Clean Trade, Market Value, MDS, Recon,
-  Bid). Profit, Transport and Buy Fee are kept, since they're usually the
+  `MAX BUY: $11,915 | Grade A at bid $11,915: profit $3,500, $117/day, cost 80% of mkt, ~30 days | Pay up to: A $12,787 / B $14,365 / C $14,965 | Sale $17,519 | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/18/2026`
+- **New:** clears the per-car fields (Clean Trade, Market Value, MDS, days
+  to sell, Recon, Bid). Profit, Transport and Buy Fee are kept, since they're usually the
   same from car to car.

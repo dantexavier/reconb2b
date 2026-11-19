@@ -14,7 +14,8 @@
     { below: 90, factor: 0.97, label: 'Slow' },
     { below: Infinity, factor: 0.94, label: 'Oversupplied' },
   ];
-  // Days to sell = market days supply × the "Sell speed" setting (blank = 100%).
+  // Days to sell = what you type in "Est. days to sell", or if that's blank,
+  // market days supply × the "Sell speed" setting (blank = 100%).
   const DEFAULT_SPEED = 100;
 
   // Deal grade cutoffs (gross profit per day on the lot; no holding cost yet).
@@ -27,6 +28,7 @@
     market: { label: 'Market Value', perVehicle: true },
     mds: { label: 'Market Days Supply', perVehicle: true, kind: 'days' },
     speed: { label: 'Sell speed (% of MDS)', kind: 'pct' },
+    days: { label: 'Est. days to sell', perVehicle: true, kind: 'days' },
     profit: { label: 'Target Profit' },
     transport: { label: 'Transport' },
     buyFee: { label: 'Buy Fee' },
@@ -139,6 +141,21 @@
     .stats span { color: #94a3b8; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
     .stats b { color: #f1f5f9; font-size: 13px; }
     .stats b.neg { color: #f87171; }
+    .ladder { display: grid; gap: 4px; }
+    .lhead { color: #94a3b8; font-size: 11px; padding: 0 2px; }
+    .lgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+    .lcell {
+      display: flex; align-items: center; justify-content: space-between; gap: 4px;
+      padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.05);
+      border: 1px solid rgba(148,163,184,.2); font-variant-numeric: tabular-nums;
+    }
+    .lcell b { font-size: 12.5px; color: #f1f5f9; }
+    .lcell b.neg { color: #f87171; }
+    .chip {
+      width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center;
+      font-size: 11px; font-weight: 800; color: #0f172a;
+    }
+    .chip.A { background: #4ade80; } .chip.B { background: #60a5fa; } .chip.C { background: #fbbf24; }
     .dealnote { color: #94a3b8; font-size: 11px; text-align: center; }
     .btns { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
     .btn {
@@ -181,7 +198,7 @@
           ${row('mds')}
           ${row('speed')}
           <div class="calc"><span>Sell at</span><b id="sellAt">—</b></div>
-          <div class="calc"><span>Est. days to sell</span><b id="daysInfo">—</b></div>
+          ${row('days')}
           <div class="calc strong"><span>Expected sale price</span><b id="sale">$0</b></div>
           <div class="warn" id="capWarn">Market is above the bank ceiling: priced at the bank cap.</div>
           <div class="sep"></div>
@@ -191,6 +208,14 @@
           ${row('recon')}
           <div class="sep"></div>
           <div class="result" id="result"><span>Max Purchase</span><b id="max">$0</b></div>
+          <div class="ladder">
+            <div class="lhead" id="ladderHead">Pay up to, by grade</div>
+            <div class="lgrid">
+              <div class="lcell"><span class="chip A">A</span><b id="lA">–</b></div>
+              <div class="lcell"><span class="chip B">B</span><b id="lB">–</b></div>
+              <div class="lcell"><span class="chip C">C</span><b id="lC">–</b></div>
+            </div>
+          </div>
           <div class="sep"></div>
           ${row('bid')}
           <div class="deal">
@@ -218,7 +243,7 @@
     els = {
       host,
       ...Object.fromEntries(
-        ['panel', 'head', 'mini', 'ceiling', 'sellAt', 'daysInfo', 'sale', 'capWarn',
+        ['panel', 'head', 'mini', 'ceiling', 'sellAt', 'lA', 'lB', 'lC', 'ladderHead', 'sale', 'capWarn',
           'max', 'result', 'grade', 'dProfit', 'dPerDay', 'dCtm', 'dRoi', 'dealNote',
           'copy', 'clear', 'opacity', 'collapse', 'close'].map((id) => [id, $(id)])
       ),
@@ -300,7 +325,8 @@
     const allIn = price + costs;
     const dealProfit = sale - allIn;
     const speed = (parse(state.values.speed) || DEFAULT_SPEED) / 100;
-    const days = v.mds > 0 ? Math.max(1, Math.round(v.mds * speed)) : null;
+    const mdsDays = v.mds > 0 ? Math.max(1, Math.round(v.mds * speed)) : null;
+    const days = v.days > 0 ? Math.round(v.days) : mdsDays;
     const perDay = days ? dealProfit / days : null;
     const ctm = v.market > 0 && allIn > 0 ? allIn / v.market : null;
     const roi = allIn > 0 ? dealProfit / allIn : null;
@@ -314,8 +340,20 @@
       else grade = 'D';
     }
 
+    // Reverse: the most you can pay and still earn each grade over `days`.
+    //   price ≤ sale − expenses − ($/day cutoff × days)
+    //   an A also needs all-in cost ≤ 85% of market value.
+    let ladder = null;
+    if (sale > 0 && days) {
+      ladder = {};
+      for (const g of ['A', 'B', 'C']) ladder[g] = sale - costs - GRADE[g] * days;
+      if (v.market > 0) {
+        ladder.A = Math.min(ladder.A, v.market * A_MAX_COST_TO_MARKET - costs);
+      }
+    }
+
     return { ...v, ceiling, band, sale, capped, costs, max, atBid, price, allIn,
-      dealProfit, days, perDay, ctm, roi, grade };
+      dealProfit, mdsDays, days, perDay, ctm, roi, grade, ladder };
   }
 
   function render() {
@@ -323,11 +361,21 @@
     els.ceiling.textContent = money(c.ceiling);
     if (c.band) {
       els.sellAt.textContent = `${pct(c.band.factor)} of market (${c.band.label.toLowerCase()})`;
-      els.daysInfo.textContent = `~${c.days} days`;
     } else {
       els.sellAt.textContent = c.market > 0 ? '100% of market' : '—';
-      els.daysInfo.textContent = 'enter MDS';
     }
+    // Blank days box shows the MDS-based estimate as its placeholder.
+    els.inputs.days.placeholder = c.mdsDays ? `${c.mdsDays} (MDS)` : 'days';
+
+    for (const g of ['A', 'B', 'C']) {
+      const el = els['l' + g];
+      const n = c.ladder?.[g];
+      el.textContent = n == null ? '–' : money(n);
+      el.classList.toggle('neg', n != null && n < 0);
+    }
+    els.ladderHead.textContent = c.days
+      ? `Pay up to, by grade (selling in ~${c.days} days)`
+      : 'Pay up to, by grade (enter days to sell or MDS)';
     els.sale.textContent = money(c.sale);
     els.capWarn.classList.toggle('on', c.capped);
 
@@ -346,7 +394,7 @@
       els.grade.textContent = c.grade;
       els.grade.classList.add(c.grade);
     } else {
-      els.grade.textContent = ready ? 'Add MDS' : '–';
+      els.grade.textContent = ready ? 'Add days' : '–';
       if (ready) els.grade.classList.add('small');
     }
     els.dealNote.textContent = ready
@@ -368,6 +416,9 @@
           (c.ctm != null ? `, cost ${pct(c.ctm)} of mkt` : '') +
           `, ~${c.days} days`
       );
+    }
+    if (c.ladder) {
+      parts.push(`Pay up to: A ${money(c.ladder.A)} / B ${money(c.ladder.B)} / C ${money(c.ladder.C)}`);
     }
     parts.push(`Sale ${money(c.sale)}${c.capped ? ' (bank cap)' : ''}`);
     if (c.cleanTrade) parts.push(`JDP CT ${money(c.cleanTrade)} x125% = ${money(c.ceiling)}`);
