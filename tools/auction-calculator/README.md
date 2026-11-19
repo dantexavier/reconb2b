@@ -56,7 +56,9 @@ and grade cutoffs are at the top of `content.js` under "Tunable numbers".
   only on the tab you clicked it in, and stays open on that tab as you click
   through listings. Numbers you've typed carry over if you open it on
   another tab.
-- **Move it:** drag the title bar. **–** collapses it to just the max-buy number.
+- **Move it:** drag the title bar. **–** collapses it to a small bar docked
+  at the bottom of the window showing the max buy and grade (drag it
+  sideways if it's in the way). **+** expands it back where it was.
 - **Transparency:** slider at the bottom. It turns fully solid while your
   mouse is over it.
 - **Copy to Notes:** copies a line like this, ready to paste into the

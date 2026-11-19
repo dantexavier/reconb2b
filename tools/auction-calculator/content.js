@@ -414,7 +414,15 @@
     els.collapse.textContent = state.collapsed ? '+' : '–';
     els.collapse.title = state.collapsed ? 'Expand' : 'Collapse';
     const { top, left, right } = state.pos;
-    p.style.top = clamp(top, 0, window.innerHeight - 40) + 'px';
+    // Collapsed: dock the bar to the bottom of the window (same left/right spot).
+    // Expanded: go back to where it was dragged to.
+    if (state.collapsed) {
+      p.style.top = 'auto';
+      p.style.bottom = '16px';
+    } else {
+      p.style.top = clamp(top, 0, window.innerHeight - 40) + 'px';
+      p.style.bottom = 'auto';
+    }
     if (left != null) {
       p.style.left = clamp(left, 0, window.innerWidth - 80) + 'px';
       p.style.right = 'auto';
@@ -437,7 +445,8 @@
     els.head.addEventListener('pointermove', (e) => {
       if (!start) return;
       state.pos = {
-        top: start.top + e.clientY - start.y,
+        // While docked at the bottom, dragging only moves it sideways.
+        top: state.collapsed ? state.pos.top : start.top + e.clientY - start.y,
         left: start.left + e.clientX - start.x,
         right: null,
       };
