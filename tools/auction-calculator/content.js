@@ -24,9 +24,6 @@
   const SELL_AT_MIN = 80; // % of market
   const SELL_AT_MAX = 110;
 
-  // Deal grade cutoffs (gross profit per day on the lot; no holding cost yet).
-  const GRADE = { A: 60, B: 35, C: 15 }; // $/day
-  const A_MAX_COST_TO_MARKET = 0.85; // an A also needs all-in cost ≤ 85% of market
   // ----------------------------------------------------------------------
 
   const FIELDS = {
@@ -40,16 +37,14 @@
     transport: { label: 'Transport' },
     buyFee: { label: 'Buy Fee' },
     recon: { label: 'Est. Recon', perVehicle: true },
-    bid: { label: 'Bid / Price', perVehicle: true },
   };
   const KEYS = Object.keys(FIELDS);
 
   const money = (n) =>
     (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
-  const pct = (n) => Math.round(n * 100) + '%';
 
   const parse = (s) => {
-    const n = parseFloat(String(s ?? '').replace(/[^0-9.\-]/g, ''));
+    const n = parseFloat(String(s ?? '').replace(/[^0-9.-]/g, ''));
     return Number.isFinite(n) ? n : 0;
   };
   const format = (key, s) => {
@@ -135,39 +130,7 @@
     .result b { font-size: 20px; color: #4ade80; font-variant-numeric: tabular-nums; }
     .result.neg { background: rgba(239,68,68,.15); border-color: rgba(239,68,68,.45); }
     .result.neg span { color: #fecaca; } .result.neg b { color: #f87171; }
-    .deal {
-      display: grid; grid-template-columns: 52px 1fr; gap: 10px; align-items: center;
-      padding: 8px; border-radius: 8px; background: rgba(255,255,255,.05);
-      border: 1px solid rgba(148,163,184,.25);
-    }
-    .grade {
-      height: 52px; border-radius: 8px; display: grid; place-items: center;
-      font-size: 28px; font-weight: 800; color: #0f172a; background: #475569;
-    }
-    .grade.small { font-size: 11px; font-weight: 600; color: #cbd5e1; text-align: center; line-height: 1.2; }
-    .grade.A { background: #4ade80; } .grade.B { background: #60a5fa; }
-    .grade.C { background: #fbbf24; } .grade.D { background: #f87171; }
-    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-variant-numeric: tabular-nums; }
-    .stats div { display: flex; flex-direction: column; }
-    .stats span { color: #94a3b8; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; }
-    .stats b { color: #f1f5f9; font-size: 13px; }
-    .stats b.neg { color: #f87171; }
-    .ladder { display: grid; gap: 4px; }
-    .lhead { color: #94a3b8; font-size: 11px; padding: 0 2px; }
-    .lgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-    .lcell {
-      display: flex; align-items: center; justify-content: space-between; gap: 4px;
-      padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.05);
-      border: 1px solid rgba(148,163,184,.2); font-variant-numeric: tabular-nums;
-    }
-    .lcell b { font-size: 12.5px; color: #f1f5f9; }
-    .lcell b.neg { color: #f87171; }
-    .chip {
-      width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center;
-      font-size: 11px; font-weight: 800; color: #0f172a;
-    }
-    .chip.A { background: #4ade80; } .chip.B { background: #60a5fa; } .chip.C { background: #fbbf24; }
-    .dealnote { color: #94a3b8; font-size: 11px; text-align: center; }
+    .maxnote { color: #94a3b8; font-size: 11px; text-align: center; }
     .btns { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
     .btn {
       all: unset; cursor: pointer; text-align: center; padding: 8px 10px; border-radius: 8px;
@@ -220,26 +183,7 @@
           ${row('recon')}
           <div class="sep"></div>
           <div class="result" id="result"><span>Max Purchase</span><b id="max">$0</b></div>
-          <div class="ladder">
-            <div class="lhead" id="ladderHead">Pay up to, by grade</div>
-            <div class="lgrid">
-              <div class="lcell"><span class="chip A">A</span><b id="lA">–</b></div>
-              <div class="lcell"><span class="chip B">B</span><b id="lB">–</b></div>
-              <div class="lcell"><span class="chip C">C</span><b id="lC">–</b></div>
-            </div>
-          </div>
-          <div class="sep"></div>
-          ${row('bid')}
-          <div class="deal">
-            <div class="grade" id="grade">–</div>
-            <div class="stats">
-              <div><span>Profit</span><b id="dProfit">–</b></div>
-              <div><span>Per day</span><b id="dPerDay">–</b></div>
-              <div><span>Your cost</span><b id="dCtm">–</b></div>
-              <div><span>ROI</span><b id="dRoi">–</b></div>
-            </div>
-          </div>
-          <div class="dealnote" id="dealNote"></div>
+          <div class="maxnote" id="maxNote"></div>
           <div class="btns">
             <button class="btn" id="copy">Copy to Notes</button>
             <button class="btn ghost" id="clear" title="Clear the per-car fields for the next vehicle">New</button>
@@ -255,8 +199,8 @@
     els = {
       host,
       ...Object.fromEntries(
-        ['panel', 'head', 'mini', 'ceiling', 'clampWarn', 'lA', 'lB', 'lC', 'ladderHead', 'sale', 'capWarn',
-          'max', 'result', 'grade', 'dProfit', 'dPerDay', 'dCtm', 'dRoi', 'dealNote',
+        ['panel', 'head', 'mini', 'ceiling', 'clampWarn', 'sale', 'capWarn',
+          'max', 'result', 'maxNote',
           'copy', 'clear', 'opacity', 'collapse', 'close'].map((id) => [id, $(id)])
       ),
       inputs: Object.fromEntries(KEYS.map((k) => [k, $(k)])),
@@ -368,38 +312,7 @@
     const costs = v.transport + v.buyFee + v.recon;
     const max = sale - v.profit - costs;
 
-    // Grade the deal at the bid if one is entered, otherwise at the max buy.
-    const atBid = v.bid > 0;
-    const price = atBid ? v.bid : max;
-    const allIn = price + costs;
-    const dealProfit = sale - allIn;
-    const perDay = days ? dealProfit / days : null;
-    const ctm = v.market > 0 && allIn > 0 ? allIn / v.market : null;
-    const roi = allIn > 0 ? dealProfit / allIn : null;
-
-    let grade = null;
-    if (sale > 0 && perDay != null) {
-      if (dealProfit <= 0) grade = 'D';
-      else if (perDay >= GRADE.A && (ctm == null || ctm <= A_MAX_COST_TO_MARKET)) grade = 'A';
-      else if (perDay >= GRADE.B) grade = 'B';
-      else if (perDay >= GRADE.C) grade = 'C';
-      else grade = 'D';
-    }
-
-    // Reverse: the most you can pay and still earn each grade over `days`.
-    //   price ≤ sale − expenses − ($/day cutoff × days)
-    //   an A also needs all-in cost ≤ 85% of market value.
-    let ladder = null;
-    if (sale > 0 && days) {
-      ladder = {};
-      for (const g of ['A', 'B', 'C']) ladder[g] = sale - costs - GRADE[g] * days;
-      if (v.market > 0) {
-        ladder.A = Math.min(ladder.A, v.market * A_MAX_COST_TO_MARKET - costs);
-      }
-    }
-
-    return { ...v, ceiling, band, sale, capped, costs, max, atBid, price, allIn,
-      dealProfit, mdsDays, days, perDay, ctm, roi, grade, ladder,
+    return { ...v, ceiling, band, sale, capped, costs, max, mdsDays, days,
       sellPct, driver, clamped };
   }
 
@@ -419,59 +332,25 @@
     els.clampWarn.textContent = warn;
     els.clampWarn.classList.toggle('on', !!warn);
 
-    for (const g of ['A', 'B', 'C']) {
-      const el = els['l' + g];
-      const n = c.ladder?.[g];
-      el.textContent = n == null ? '–' : money(n);
-      el.classList.toggle('neg', n != null && n < 0);
-    }
-    els.ladderHead.textContent = c.days
-      ? `Pay up to, by grade (selling in ~${c.days} days)`
-      : 'Pay up to, by grade (enter days to sell or MDS)';
     els.sale.textContent = money(c.sale);
     els.capWarn.classList.toggle('on', c.capped);
 
     els.max.textContent = money(c.max);
     els.result.classList.toggle('neg', c.max < 0);
 
-    const ready = c.sale > 0;
-    els.dProfit.textContent = ready ? money(c.dealProfit) : '–';
-    els.dProfit.classList.toggle('neg', ready && c.dealProfit < 0);
-    els.dPerDay.textContent = ready && c.perDay != null ? money(c.perDay) + '/day' : '–';
-    els.dCtm.textContent = ready && c.ctm != null ? `${pct(c.ctm)} of mkt` : '–';
-    els.dRoi.textContent = ready && c.roi != null ? pct(c.roi) : '–';
-
-    els.grade.className = 'grade';
-    if (c.grade) {
-      els.grade.textContent = c.grade;
-      els.grade.classList.add(c.grade);
-    } else {
-      els.grade.textContent = ready ? 'Add days' : '–';
-      if (ready) els.grade.classList.add('small');
-    }
-    els.dealNote.textContent = ready
-      ? `Graded at ${c.atBid ? `your bid of ${money(c.price)}` : `the max buy`}` +
-        (c.days ? ` · sells in ~${c.days} days` : '')
+    els.maxNote.textContent = c.sale > 0
+      ? (c.days ? `To sell in ~${c.days} days` : 'Enter MDS or days to sell for a timeframe') +
+        (c.capped ? ' · priced at the bank cap' : ` · priced at ${fmtPct(c.sellPct)} of market`)
       : '';
 
-    els.mini.textContent = money(c.max) + (c.grade ? ` · ${c.grade}` : '');
+    els.mini.textContent = money(c.max);
   }
 
   function noteText() {
     const c = compute();
     const date = new Date().toLocaleDateString('en-US');
     const parts = [`MAX BUY: ${money(c.max)}`];
-    if (c.grade) {
-      parts.push(
-        `Grade ${c.grade} at ${c.atBid ? `bid ${money(c.price)}` : 'max buy'}: ` +
-          `profit ${money(c.dealProfit)}, ${money(c.perDay)}/day` +
-          (c.ctm != null ? `, cost ${pct(c.ctm)} of mkt` : '') +
-          `, ~${c.days} days`
-      );
-    }
-    if (c.ladder) {
-      parts.push(`Pay up to: A ${money(c.ladder.A)} / B ${money(c.ladder.B)} / C ${money(c.ladder.C)}`);
-    }
+    if (c.days) parts.push(`Sell in ~${c.days} days`);
     parts.push(
       `Sale ${money(c.sale)}` +
         (c.capped ? ' (bank cap)' : ` (${fmtPct(c.sellPct)} of mkt)`)
