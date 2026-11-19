@@ -18,6 +18,12 @@
   // market days supply × the "Sell speed" setting (blank = 100%).
   const DEFAULT_SPEED = 100;
 
+  // Price ↔ speed link: each 1% priced under market sells this much faster
+  // (and each 1% over, this much slower). A starting guess — calibrate it.
+  const FASTER_PER_POINT = 0.10; // 10% fewer days per 1% under market
+  const SELL_AT_MIN = 80; // % of market
+  const SELL_AT_MAX = 110;
+
   // Deal grade cutoffs (gross profit per day on the lot; no holding cost yet).
   const GRADE = { A: 60, B: 35, C: 15 }; // $/day
   const A_MAX_COST_TO_MARKET = 0.85; // an A also needs all-in cost ≤ 85% of market
@@ -28,6 +34,7 @@
     market: { label: 'Market Value', perVehicle: true },
     mds: { label: 'Market Days Supply', perVehicle: true, kind: 'days' },
     speed: { label: 'Sell speed (% of MDS)', kind: 'pct' },
+    sellAt: { label: 'Sell at (% of mkt)', perVehicle: true, kind: 'pct1' },
     days: { label: 'Est. days to sell', perVehicle: true, kind: 'days' },
     profit: { label: 'Target Profit' },
     transport: { label: 'Transport' },
@@ -49,9 +56,13 @@
     const kind = FIELDS[key].kind;
     if (kind === 'days') return String(Math.round(parse(s)));
     if (kind === 'pct') return Math.round(parse(s)) + '%';
+    if (kind === 'pct1') return fmtPct(parse(s));
     return money(parse(s));
   };
-  const PLACEHOLDER = { days: 'days', pct: DEFAULT_SPEED + '%' };
+  const fmtPct = (n) => Math.round(n * 10) / 10 + '%';
+  const PLACEHOLDER = { days: 'days', pct: DEFAULT_SPEED + '%', pct1: '%' };
+  // Sell at % and days to sell drive each other: typing in one clears the other.
+  const LINKED = { sellAt: 'days', days: 'sellAt' };
 
   let root = null;
   let els = {};
@@ -197,8 +208,9 @@
           ${row('market')}
           ${row('mds')}
           ${row('speed')}
-          <div class="calc"><span>Sell at</span><b id="sellAt">—</b></div>
+          ${row('sellAt')}
           ${row('days')}
+          <div class="warn" id="clampWarn"></div>
           <div class="calc strong"><span>Expected sale price</span><b id="sale">$0</b></div>
           <div class="warn" id="capWarn">Market is above the bank ceiling: priced at the bank cap.</div>
           <div class="sep"></div>
@@ -243,7 +255,7 @@
     els = {
       host,
       ...Object.fromEntries(
-        ['panel', 'head', 'mini', 'ceiling', 'sellAt', 'lA', 'lB', 'lC', 'ladderHead', 'sale', 'capWarn',
+        ['panel', 'head', 'mini', 'ceiling', 'clampWarn', 'lA', 'lB', 'lC', 'ladderHead', 'sale', 'capWarn',
           'max', 'result', 'grade', 'dProfit', 'dPerDay', 'dCtm', 'dRoi', 'dealNote',
           'copy', 'clear', 'opacity', 'collapse', 'close'].map((id) => [id, $(id)])
       ),
@@ -260,6 +272,11 @@
       input.value = state.values[key] ?? '';
       input.addEventListener('input', () => {
         state.values[key] = input.value;
+        const other = LINKED[key];
+        if (other && input.value.trim() !== '') {
+          state.values[other] = '';
+          els.inputs[other].value = '';
+        }
         render();
         save();
       });
@@ -308,7 +325,39 @@
 
     const ceiling = v.cleanTrade * MARKUP;
     const band = v.mds > 0 ? MDS_BANDS.find((b) => v.mds < b.below) : null;
-    const marketPrice = v.market > 0 ? v.market * (band ? band.factor : 1) : 0;
+
+    // Starting point from the market: the MDS band's price, selling in
+    // MDS × sell speed days.
+    const speed = (parse(state.values.speed) || DEFAULT_SPEED) / 100;
+    const mdsDays = v.mds > 0 ? Math.max(1, v.mds * speed) : null;
+    const basePct = band ? band.factor * 100 : 100;
+    const r = 1 - FASTER_PER_POINT;
+    const clampPct = (n) => Math.max(SELL_AT_MIN, Math.min(SELL_AT_MAX, n));
+
+    // Whichever of Sell at % / days you typed drives the other.
+    let sellPct = basePct;
+    let days = mdsDays;
+    let driver = null;
+    let clamped = false;
+    if (v.sellAt > 0) {
+      driver = 'sellAt';
+      sellPct = clampPct(v.sellAt);
+      clamped = sellPct !== v.sellAt;
+      if (mdsDays) days = mdsDays * Math.pow(r, basePct - sellPct);
+    } else if (v.days > 0) {
+      driver = 'days';
+      days = v.days;
+      if (mdsDays) {
+        const want = basePct - Math.log(v.days / mdsDays) / Math.log(r);
+        sellPct = clampPct(want);
+        clamped = Math.abs(sellPct - want) > 0.05;
+        // If the price hit a limit, the days that price actually gets you.
+        if (clamped) days = mdsDays * Math.pow(r, basePct - sellPct);
+      }
+    }
+    if (days) days = Math.max(1, Math.round(days));
+
+    const marketPrice = v.market > 0 ? v.market * (sellPct / 100) : 0;
 
     // Sale price = lower of the bank ceiling and the (MDS-adjusted) market value.
     let sale = 0;
@@ -324,9 +373,6 @@
     const price = atBid ? v.bid : max;
     const allIn = price + costs;
     const dealProfit = sale - allIn;
-    const speed = (parse(state.values.speed) || DEFAULT_SPEED) / 100;
-    const mdsDays = v.mds > 0 ? Math.max(1, Math.round(v.mds * speed)) : null;
-    const days = v.days > 0 ? Math.round(v.days) : mdsDays;
     const perDay = days ? dealProfit / days : null;
     const ctm = v.market > 0 && allIn > 0 ? allIn / v.market : null;
     const roi = allIn > 0 ? dealProfit / allIn : null;
@@ -353,19 +399,25 @@
     }
 
     return { ...v, ceiling, band, sale, capped, costs, max, atBid, price, allIn,
-      dealProfit, mdsDays, days, perDay, ctm, roi, grade, ladder };
+      dealProfit, mdsDays, days, perDay, ctm, roi, grade, ladder,
+      sellPct, driver, clamped };
   }
 
   function render() {
     const c = compute();
     els.ceiling.textContent = money(c.ceiling);
-    if (c.band) {
-      els.sellAt.textContent = `${pct(c.band.factor)} of market (${c.band.label.toLowerCase()})`;
-    } else {
-      els.sellAt.textContent = c.market > 0 ? '100% of market' : '—';
+    // The box you didn't type in shows the matching value in grey.
+    els.inputs.sellAt.placeholder = fmtPct(c.sellPct);
+    els.inputs.days.placeholder = c.days ? String(c.days) : 'days';
+    let warn = '';
+    if (c.clamped) {
+      warn = `Sell at is limited to ${SELL_AT_MIN}–${SELL_AT_MAX}% of market` +
+        (c.driver === 'days' ? ` — that gets you ~${c.days} days.` : '.');
+    } else if (c.driver && !c.mdsDays) {
+      warn = 'Enter Market Days Supply to link Sell at % and days to sell.';
     }
-    // Blank days box shows the MDS-based estimate as its placeholder.
-    els.inputs.days.placeholder = c.mdsDays ? `${c.mdsDays} (MDS)` : 'days';
+    els.clampWarn.textContent = warn;
+    els.clampWarn.classList.toggle('on', !!warn);
 
     for (const g of ['A', 'B', 'C']) {
       const el = els['l' + g];
@@ -420,7 +472,10 @@
     if (c.ladder) {
       parts.push(`Pay up to: A ${money(c.ladder.A)} / B ${money(c.ladder.B)} / C ${money(c.ladder.C)}`);
     }
-    parts.push(`Sale ${money(c.sale)}${c.capped ? ' (bank cap)' : ''}`);
+    parts.push(
+      `Sale ${money(c.sale)}` +
+        (c.capped ? ' (bank cap)' : ` (${fmtPct(c.sellPct)} of mkt)`)
+    );
     if (c.cleanTrade) parts.push(`JDP CT ${money(c.cleanTrade)} x125% = ${money(c.ceiling)}`);
     if (c.market) parts.push(`Mkt ${money(c.market)}`);
     if (c.mds) parts.push(`MDS ${Math.round(c.mds)}`);

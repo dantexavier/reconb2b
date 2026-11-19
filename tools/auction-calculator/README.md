@@ -16,18 +16,32 @@ filled in, the sale price is the bank ceiling.
 
 Enter a **Bid / Price** to grade that bid; leave it blank to grade the max buy.
 
-| Market Days Supply | Sell at |
+### Sell at % and days to sell are linked
+
+Type in either box and the other fills in (in grey) to match. Typing in one
+clears the other, so whichever you typed last is in charge. Leave both blank
+to use the market's own numbers:
+
+| Market Days Supply | Default sell at |
 |---|---|
 | under 60 (hot / normal) | 100% of market |
 | 60–89 (slow) | 97% |
 | 90+ (oversupplied) | 94% |
 
-**Est. days to sell:** type your own estimate, or leave it blank to use
-Market Days Supply × **Sell speed** (the box shows that estimate in grey).
-For the blank case: Sell speed
-defaults to 100% (leave it blank). Once your own sales show your cars sell
-faster or slower than the market, change it: e.g. if you typically sell in
-70% of the market's days supply, enter 70%. It's kept between cars.
+…selling in **Market Days Supply × Sell speed** days (Sell speed blank = 100%).
+
+From there, **each 1% you price under that default sells ~10% faster**, and
+each 1% over sells ~10% slower. Sell at is limited to 80–110% of market.
+Example with MDS 53 and market $17,519:
+
+| You type | Other box shows | Sale price |
+|---|---|---|
+| 30 days | 94.6% | $16,573 |
+| 97% | 39 days | $16,993 |
+| 110% | 152 days | $19,271 |
+
+The 10% figure is a starting guess. Change `FASTER_PER_POINT` at the top of
+`content.js` once you see how your own price cuts affect speed.
 
 - **Profit** = sale price − (price + transport + buy fee + recon)
 - **Per day** = profit ÷ expected days to sell
@@ -79,7 +93,7 @@ and grade cutoffs are at the top of `content.js` under "Tunable numbers".
   mouse is over it.
 - **Copy to Notes:** copies a line like this, ready to paste into the
   auction's notes:
-  `MAX BUY: $11,915 | Grade A at bid $11,915: profit $3,500, $117/day, cost 80% of mkt, ~30 days | Pay up to: A $12,787 / B $14,365 / C $14,965 | Sale $17,519 | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/18/2026`
-- **New:** clears the per-car fields (Clean Trade, Market Value, MDS, days
-  to sell, Recon, Bid). Profit, Transport and Buy Fee are kept, since they're usually the
+  `MAX BUY: $11,915 | Grade A at bid $11,915: profit $3,500, $117/day, cost 80% of mkt, ~30 days | Pay up to: A $12,787 / B $14,365 / C $14,965 | Sale $17,519 (100% of mkt) | JDP CT $16,375 x125% = $20,469 | Mkt $17,519 | MDS 53 | Profit $3,500 | Transport $494 | Buy Fee $110 | Recon $1,500 | 11/18/2026`
+- **New:** clears the per-car fields (Clean Trade, Market Value, MDS, Sell
+  at, days to sell, Recon, Bid). Profit, Transport and Buy Fee are kept, since they're usually the
   same from car to car.
