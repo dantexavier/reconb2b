@@ -14,9 +14,8 @@
     { below: 90, factor: 0.97, label: 'Slow' },
     { below: Infinity, factor: 0.94, label: 'Oversupplied' },
   ];
-  // Days to sell = what you type in "Est. days to sell", or if that's blank,
-  // market days supply × the "Sell speed" setting (blank = 100%).
-  const DEFAULT_SPEED = 100;
+  // Days to sell = what you type in "Est. days to sell", or if that's blank
+  // (and Sell at is blank too), the market days supply.
 
   // Price ↔ speed link: each 1% priced under market sells this much faster
   // (and each 1% over, this much slower). A starting guess — calibrate it.
@@ -30,7 +29,6 @@
     cleanTrade: { label: 'JD Power Clean Trade', perVehicle: true },
     market: { label: 'Market Value', perVehicle: true },
     mds: { label: 'Market Days Supply', perVehicle: true, kind: 'days' },
-    speed: { label: 'Sell speed (% of MDS)', kind: 'pct' },
     sellAt: { label: 'Sell at (% of mkt)', perVehicle: true, kind: 'pct1' },
     days: { label: 'Est. days to sell', perVehicle: true, kind: 'days' },
     profit: { label: 'Target Profit' },
@@ -50,12 +48,11 @@
   const format = (key, s) => {
     const kind = FIELDS[key].kind;
     if (kind === 'days') return String(Math.round(parse(s)));
-    if (kind === 'pct') return Math.round(parse(s)) + '%';
     if (kind === 'pct1') return fmtPct(parse(s));
     return money(parse(s));
   };
   const fmtPct = (n) => Math.round(n * 10) / 10 + '%';
-  const PLACEHOLDER = { days: 'days', pct: DEFAULT_SPEED + '%', pct1: '%' };
+  const PLACEHOLDER = { days: 'days', pct1: '%' };
   // Sell at % and days to sell drive each other: typing in one clears the other.
   const LINKED = { sellAt: 'days', days: 'sellAt' };
 
@@ -170,7 +167,6 @@
           <div class="calc"><span>Bank ceiling (125%)</span><b id="ceiling">$0</b></div>
           ${row('market')}
           ${row('mds')}
-          ${row('speed')}
           ${row('sellAt')}
           ${row('days')}
           <div class="warn" id="clampWarn"></div>
@@ -270,10 +266,8 @@
     const ceiling = v.cleanTrade * MARKUP;
     const band = v.mds > 0 ? MDS_BANDS.find((b) => v.mds < b.below) : null;
 
-    // Starting point from the market: the MDS band's price, selling in
-    // MDS × sell speed days.
-    const speed = (parse(state.values.speed) || DEFAULT_SPEED) / 100;
-    const mdsDays = v.mds > 0 ? Math.max(1, v.mds * speed) : null;
+    // Starting point from the market: the MDS band's price, selling in MDS days.
+    const mdsDays = v.mds > 0 ? v.mds : null;
     const basePct = band ? band.factor * 100 : 100;
     const r = 1 - FASTER_PER_POINT;
     const clampPct = (n) => Math.max(SELL_AT_MIN, Math.min(SELL_AT_MAX, n));

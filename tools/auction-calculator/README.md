@@ -32,7 +32,7 @@ to use the market's own numbers:
 | 60–89 (slow) | 97% |
 | 90+ (oversupplied) | 94% |
 
-…selling in **Market Days Supply × Sell speed** days (Sell speed blank = 100%).
+…selling in **Market Days Supply** days.
 
 From there, **each 1% you price under that default sells ~10% faster**, and
 each 1% over sells ~10% slower. Sell at is limited to 80–110% of market.
