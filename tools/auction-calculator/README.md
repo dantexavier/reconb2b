@@ -59,6 +59,24 @@ bands and the price/speed link are at the top of `content.js` under
 4. Click **Load unpacked** and pick the `auction-calculator` folder.
 5. Pin it: puzzle-piece icon in the toolbar → pin **Auction Max-Buy Calculator**.
 
+## Which sites it runs on
+
+It runs on **Manheim, ADESA / OPENLANE and ACV Auctions** automatically. On
+any other site, click the icon and Chrome asks once: *"Allow on this site?"*.
+Say yes and it works there from then on. To take a site back off, go to
+`chrome://extensions` → Auction Max-Buy Calculator → **Details** → **Site access**.
+
+## Publishing to the Chrome Web Store
+
+Everything needed to publish it (unlisted, auto-updating) is in `store/`:
+
+- `store/LISTING.md`: step-by-step, with the description, privacy answers
+  and permission justifications ready to paste
+- `store/screenshot-1280x800.png`: the store screenshot
+- `icons/icon128.png`: the store icon
+- Upload file: `tools/dist/auction-calculator-<version>.zip`, built with
+  `bash tools/auction-calculator/store/build-zip.sh`
+
 ## Use
 
 - **Show / hide:** click the toolbar icon or press **Alt+Shift+A**. It opens
